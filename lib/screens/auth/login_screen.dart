@@ -17,10 +17,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isPasswordVisible = true;
 
   void _login() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -129,40 +130,47 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _passwordController,
-                          obscureText: true,
+                          obscureText: _isPasswordVisible,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Lütfen şifrenizi girin.';
                             }
                             return null;
                           },
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: 'Şifre',
                             prefixIcon: Icon(Iconsax.lock),
-                            suffixIcon: Icon(Iconsax.eye_slash),
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
+                              icon: Icon(Iconsax.eye_slash),
+                            ),
                           ),
                         ),
-                      const SizedBox(height: 24),
-                      Consumer<AuthViewModel>(
-                        builder: (context, authState, child) {
-                          return ElevatedButton(
-                            onPressed: authState.isLoading ? null : _login,
-                            child: authState.isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('Log In'),
-                          );
-                        },
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        Consumer<AuthViewModel>(
+                          builder: (context, authState, child) {
+                            return ElevatedButton(
+                              onPressed: authState.isLoading ? null : _login,
+                              child: authState.isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text('Log In'),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
                 const SizedBox(height: 32),
 
                 // Social Signup
