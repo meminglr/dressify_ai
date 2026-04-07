@@ -4,7 +4,7 @@ import '../../core/theme/app_colors.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import 'register_screen.dart';
-import '../home/home_screen.dart';
+import '../../home.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // The Provider in main.dart handles changing the root home widget based on auth state,
       // but to be safe and clear the navigation stack:
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const Home()),
         (route) => false,
       );
     } else if (!success && mounted) {
@@ -49,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success && mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const Home()),
         (route) => false,
       );
     } else if (!success && mounted && authViewModel.errorMessage != null) {
@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Welcome back! Enter your details to explore your digital atelier.',
+                  'Tekrar hoş geldiniz! Dijital atölyenizi keşfetmek için bilgilerinizi girin.',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: AppColors.outlineVariant,
                   ),
@@ -154,7 +154,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Consumer<AuthViewModel>(
                           builder: (context, authState, child) {
                             return ElevatedButton(
-                              onPressed: authState.isLoading ? null : _login,
+                              onPressed: (authState.isLoading || authState.isGoogleLoading) ? null : _login,
                               child: authState.isLoading
                                   ? const SizedBox(
                                       height: 20,
@@ -163,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('Log In'),
+                                  : const Text('Giriş Yap'),
                             );
                           },
                         ),
@@ -176,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Social Signup
                 Center(
                   child: Text(
-                    'Or continue with',
+                    'Veya şununla devam et',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: AppColors.outlineVariant,
                     ),
@@ -186,8 +186,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 Consumer<AuthViewModel>(
                   builder: (context, authState, child) {
                     return OutlinedButton.icon(
-                      onPressed: authState.isLoading ? null : _googleLogin,
-                      icon: authState.isLoading
+                      onPressed: (authState.isLoading || authState.isGoogleLoading) ? null : _googleLogin,
+                      icon: authState.isGoogleLoading
                           ? const SizedBox(
                               width: 20,
                               height: 20,
@@ -197,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Iconsax.login,
                               color: AppColors.onSurface,
                             ),
-                      label: const Text('Continue with Google'),
+                      label: const Text('Google ile Devam Et'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.onSurface,
                         minimumSize: const Size(double.infinity, 56),
@@ -217,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Don't have an account? ",
+                      "Hesabınız yok mu? ",
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     TextButton(
@@ -229,7 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
                       },
                       child: Text(
-                        'Sign up',
+                        'Kayıt ol',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: AppColors.primary,
                         ),

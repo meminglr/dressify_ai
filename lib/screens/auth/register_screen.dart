@@ -3,7 +3,7 @@ import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../core/theme/app_colors.dart';
-import '../home/home_screen.dart';
+import '../../home.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -31,7 +31,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (success && mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const Home()),
         (route) => false,
       );
     } else if (!success && mounted && authViewModel.errorMessage != null) {
@@ -51,7 +51,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (success && mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const Home()),
         (route) => false,
       );
     } else if (!success && mounted && authViewModel.errorMessage != null) {
@@ -68,7 +68,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
+      appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Iconsax.arrow_left_2),
+              onPressed: () => Navigator.of(context).pop(),
+              color: AppColors.onSurface,
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -79,27 +96,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: const BoxDecoration(
-                    color: AppColors.surfaceContainerLowest,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Iconsax.arrow_left_2),
-                    onPressed: () => Navigator.of(context).pop(),
-                    color: AppColors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 40),
                 Text(
-                  'Create Account',
+                  'Hesap Oluştur',
                   style: Theme.of(context).textTheme.headlineLarge,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Sign up to get started and try on your favorite outfits.',
+                  'Başlamak ve favori kıyafetlerinizi denemek için kayıt olun.',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: AppColors.outlineVariant,
                   ),
@@ -182,7 +185,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Consumer<AuthViewModel>(
                           builder: (context, authState, child) {
                             return ElevatedButton(
-                              onPressed: authState.isLoading ? null : _register,
+                              onPressed: (authState.isLoading || authState.isGoogleLoading) ? null : _register,
                               child: authState.isLoading
                                   ? const SizedBox(
                                       height: 20,
@@ -204,7 +207,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Social Signup
                 Center(
                   child: Text(
-                    'Or continue with',
+                    'Veya şununla devam et',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: AppColors.outlineVariant,
                     ),
@@ -214,8 +217,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Consumer<AuthViewModel>(
                   builder: (context, authState, child) {
                     return OutlinedButton.icon(
-                      onPressed: authState.isLoading ? null : _googleLogin,
-                      icon: authState.isLoading
+                      onPressed: (authState.isLoading || authState.isGoogleLoading) ? null : _googleLogin,
+                      icon: authState.isGoogleLoading
                           ? const SizedBox(
                               width: 20,
                               height: 20,
@@ -225,7 +228,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               Iconsax.login,
                               color: AppColors.onSurface,
                             ),
-                      label: const Text('Continue with Google'),
+                      label: const Text('Google ile Devam Et'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.onSurface,
                         minimumSize: const Size(double.infinity, 56),
@@ -245,7 +248,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Already have an account? ",
+                      "Zaten bir hesabınız var mı? ",
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     TextButton(
@@ -253,7 +256,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Navigator.of(context).pop();
                       },
                       child: Text(
-                        'Log in',
+                        'Giriş yap',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: AppColors.primary,
                         ),

@@ -15,6 +15,11 @@ class AppTheme {
         onSurface: AppColors.onSurface,
         onPrimary: AppColors.onPrimary,
       ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
       textTheme: TextTheme(
         displayLarge: GoogleFonts.manrope(
           color: AppColors.onSurface,

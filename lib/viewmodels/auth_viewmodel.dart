@@ -8,10 +8,12 @@ class AuthViewModel extends ChangeNotifier {
   final SupabaseClient _supabaseClient = SupabaseService.instance.client;
 
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _errorMessage;
   User? _currentUser;
 
   bool get isLoading => _isLoading;
+  bool get isGoogleLoading => _isGoogleLoading;
   String? get errorMessage => _errorMessage;
   User? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
@@ -68,7 +70,7 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<bool> signInWithGoogle() async {
-    _setLoading(true);
+    _setGoogleLoading(true);
     try {
       final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']!;
       final iosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID']!;
@@ -80,9 +82,17 @@ class AuthViewModel extends ChangeNotifier {
         clientId: iosClientId,
       );
 
-      final googleUser =
-          await googleSignIn.attemptLightweightAuthentication() ??
-          await googleSignIn.authenticate();
+      late final GoogleSignInAccount googleUser;
+      try {
+        googleUser = await googleSignIn.authenticate();
+      } on GoogleSignInException catch (e) {
+        if (e.code == GoogleSignInExceptionCode.canceled) {
+          // Kullanıcı giriş yapmaktan vazgeçti
+          _setGoogleLoading(false);
+          return false;
+        }
+        rethrow;
+      }
 
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
@@ -99,7 +109,7 @@ class AuthViewModel extends ChangeNotifier {
           ]);
 
       if (idToken == null) {
-        throw AuthException('No ID Token found.');
+        throw const AuthException('Google ID Token bulunamadı.');
       }
 
       await _supabaseClient.auth.signInWithIdToken(
@@ -108,7 +118,7 @@ class AuthViewModel extends ChangeNotifier {
         accessToken: authorization.accessToken,
       );
 
-      _setLoading(false);
+      _setGoogleLoading(false);
       return true;
     } on AuthException catch (e) {
       _setError(e.message);
@@ -136,8 +146,15 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _setGoogleLoading(bool value) {
+    _isGoogleLoading = value;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   void _setError(String error) {
     _isLoading = false;
+    _isGoogleLoading = false;
     _errorMessage = _getFriendlyErrorMessage(error);
     notifyListeners();
   }
