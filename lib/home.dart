@@ -43,6 +43,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(toolbarHeight: 0),
       body: BottomBar(
         fit: StackFit.expand,
         borderRadius: BorderRadius.circular(40),
@@ -912,13 +913,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildPlaceholderContent(String title) {
-    return CustomScrollView(
-      slivers: [
-        SliverAppBar(
-          centerTitle: true,
-          title: Text(title, style: Theme.of(context).textTheme.headlineMedium),
-        ),
-      ],
+    return Center(
+      child: Text(title, style: Theme.of(context).textTheme.headlineMedium),
     );
   }
 }
