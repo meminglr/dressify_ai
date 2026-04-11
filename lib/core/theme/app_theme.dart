@@ -16,6 +16,7 @@ class AppTheme {
         onPrimary: AppColors.onPrimary,
       ),
       appBarTheme: AppBarTheme(
+        centerTitle: true,
         backgroundColor: AppColors.background,
         elevation: 0,
         scrolledUnderElevation: 0,
