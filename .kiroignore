@@ -1,0 +1,33 @@
+# Build & cache
+.build/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.gen.dart
+
+# Flutter / IDE
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log
+
+# Platform build outputs
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/build/
+macos/Pods/
+macos/build/
+windows/build/
+linux/build/
+
+# Misc
+coverage/
+dist/

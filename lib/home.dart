@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'core/theme/app_colors.dart';
 import 'screens/auth/login_screen.dart';
+import 'features/profile/screens/profile_screen.dart';
+import 'features/profile/viewmodels/profile_view_model.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -82,7 +84,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             HomeScreen(controller: controller),
             _buildPlaceholderContent("Keşfet"),
             _buildPlaceholderContent('Gardırop'),
-            _buildPlaceholderContent('Profil'),
+            ChangeNotifierProvider(
+              create: (_) => ProfileViewModel(),
+              child: ProfileScreen(
+                scrollController: controller,
+                parentTabController: tabController,
+              ),
+            ),
           ],
         ),
         child: Container(
