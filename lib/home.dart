@@ -45,7 +45,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(toolbarHeight: 0),
+      appBar: AppBar(toolbarHeight: 0 ),
       body: BottomBar(
         fit: StackFit.expand,
         borderRadius: BorderRadius.circular(40),
