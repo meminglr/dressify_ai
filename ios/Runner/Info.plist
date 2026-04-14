@@ -54,6 +54,11 @@
 	<string>Kıyafet ve profil fotoğraflarınızı seçmek için galeri erişimi gereklidir.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Fotoğraflarınızı kaydetmek için galeri erişimi gereklidir.</string>
+	<!-- Camera permission -->
+	<key>NSCameraUsageDescription</key>
+	<string>Fotoğraf çekmek için kamera erişimi gereklidir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Video kaydı için mikrofon erişimi gereklidir.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

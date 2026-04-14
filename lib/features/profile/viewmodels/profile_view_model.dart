@@ -1,10 +1,7 @@
-import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
-import 'package:insta_assets_picker/insta_assets_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile.dart' as ui;
 import '../models/user_stats.dart' as ui;
@@ -18,24 +15,16 @@ import '../../../exceptions/profile_exception.dart';
 import '../../../exceptions/media_exception.dart';
 import '../../../exceptions/storage_exception.dart' as app_storage;
 
-/// ProfileViewModel manages the business logic and state for the profile page.
-///
-/// This ViewModel follows the MVVM architecture pattern and extends ChangeNotifier
-/// for state management. It handles data fetching, tab filtering, realtime
-/// subscriptions, and error states.
-///
-/// Validates Requirements 7, 9, 11, 12
 class ProfileViewModel extends ChangeNotifier {
   final ProfileService _profileService;
   final MediaService _mediaService;
   final StorageService _storageService;
+  final ImagePicker _imagePicker = ImagePicker();
 
-  // Data state
   ui.Profile? _profile;
   ui.UserStats? _stats;
   List<ui.Media> _mediaList = [];
 
-  // UI state
   bool _isProfileLoading = false;
   bool _isMediaLoading = false;
   bool _isUploading = false;
@@ -44,7 +33,6 @@ class ProfileViewModel extends ChangeNotifier {
   String? _successMessage;
   int _selectedTabIndex = 0;
 
-  // Realtime channels
   RealtimeChannel? _profileChannel;
   RealtimeChannel? _mediaChannel;
 
@@ -56,10 +44,8 @@ class ProfileViewModel extends ChangeNotifier {
         _mediaService = mediaService,
         _storageService = storageService;
 
-  // Getters
   ui.Profile? get profile => _profile;
   ui.UserStats? get stats => _stats;
-  /// Returns ALL media items unfiltered — Screen handles per-tab filtering
   List<ui.Media> get mediaList => List.unmodifiable(_mediaList);
   bool get isProfileLoading => _isProfileLoading;
   bool get isMediaLoading => _isMediaLoading;
@@ -69,16 +55,6 @@ class ProfileViewModel extends ChangeNotifier {
   String? get successMessage => _successMessage;
   int get selectedTabIndex => _selectedTabIndex;
 
-  /// Computed getter that filters media list based on selected tab index.
-  ///
-  /// Validates Requirement 7
-  // NOTE: Filtering is done in ProfileScreen per-tab. This getter is kept
-  // for potential future use but not exposed publicly.
-
-  /// Loads profile data for the specified user ID.
-  ///
-  /// If [userId] is null, loads the current authenticated user's profile.
-  /// Validates Requirements 7, 9, 11
   Future<void> loadProfile(String? userId) async {
     _isError = false;
     _errorMessage = null;
@@ -96,6 +72,7 @@ class ProfileViewModel extends ChangeNotifier {
     try {
       if (_profile == null || _stats == null) {
         _isProfileLoading = true;
+        _isMediaLoading = true; // prevent empty state flash before media loads
         notifyListeners();
 
         final profileWithStats =
@@ -118,9 +95,6 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Refreshes the profile data by resetting state and reloading.
-  ///
-  /// Validates Requirement 13
   Future<void> refreshProfile() async {
     _profile = null;
     _stats = null;
@@ -129,9 +103,6 @@ class ProfileViewModel extends ChangeNotifier {
     await loadProfile(null);
   }
 
-  /// Selects a tab and filters the media list accordingly.
-  ///
-  /// Validates Requirements 7, 8
   void selectTab(int index) {
     if (_selectedTabIndex != index) {
       _selectedTabIndex = index;
@@ -139,29 +110,25 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Clears the error state.
   void clearError() {
     _isError = false;
     _errorMessage = null;
     notifyListeners();
   }
 
-  /// Clears the success message.
   void clearSuccessMessage() {
     _successMessage = null;
     notifyListeners();
   }
 
-  /// Picks and uploads a wardrobe (Gardırop) photo as MediaType.upload.
   Future<void> uploadGardiropPhoto(BuildContext context) async {
-    final asset = await _pickPhoto(context);
-    if (asset == null) return;
+    final file = await _pickPhoto(context);
+    if (file == null) return;
 
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
     try {
-      final file = await _assetToFile(asset);
       _isUploading = true;
       notifyListeners();
 
@@ -171,7 +138,6 @@ class ProfileViewModel extends ChangeNotifier {
         type: lib_media.MediaType.upload,
       );
 
-      // Directly add to list — don't wait for realtime
       _mediaList = [_mapMedia(newMedia), ..._mediaList];
       _isUploading = false;
       _successMessage = 'Kıyafet başarıyla eklendi';
@@ -181,16 +147,14 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Picks and uploads a model photo as MediaType.model.
   Future<void> uploadModelPhoto(BuildContext context) async {
-    final asset = await _pickPhoto(context);
-    if (asset == null) return;
+    final file = await _pickPhoto(context);
+    if (file == null) return;
 
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
     try {
-      final file = await _assetToFile(asset);
       _isUploading = true;
       notifyListeners();
 
@@ -200,7 +164,6 @@ class ProfileViewModel extends ChangeNotifier {
         type: lib_media.MediaType.model,
       );
 
-      // Directly add to list — don't wait for realtime
       _mediaList = [_mapMedia(newMedia), ..._mediaList];
       _isUploading = false;
       _successMessage = 'Model başarıyla eklendi';
@@ -210,19 +173,16 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Picks and uploads a new avatar photo, then updates the profile.
   Future<void> uploadAvatarPhoto(BuildContext context) async {
-    final asset = await _pickPhoto(context);
-    if (asset == null) return;
+    final file = await _pickPhoto(context);
+    if (file == null) return;
 
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
-    // Save current avatarUrl to restore on error
     final previousAvatarUrl = _profile?.avatarUrl;
 
     try {
-      final file = await _assetToFile(asset);
       _isUploading = true;
       notifyListeners();
 
@@ -236,13 +196,11 @@ class ProfileViewModel extends ChangeNotifier {
         avatarUrl: newAvatarUrl,
       );
 
-      // Map updated service profile back to UI profile
       _profile = _mapProfile(updatedProfile, userId);
       _isUploading = false;
       _successMessage = 'Profil fotoğrafı güncellendi';
       notifyListeners();
     } catch (error) {
-      // Restore previous avatar URL on error
       if (_profile != null && previousAvatarUrl != _profile!.avatarUrl) {
         _profile = ui.Profile(
           id: _profile!.id,
@@ -260,127 +218,100 @@ class ProfileViewModel extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // Private helpers
+  // Photo picking — native image_picker
   // ---------------------------------------------------------------------------
 
-  /// Opens InstaAssetsPicker to let user pick a single image.
-  /// Returns null if user cancels.
-  Future<AssetEntity?> _pickPhoto(BuildContext context) async {
+  /// Shows a bottom sheet to choose gallery or camera, then returns the File.
+  Future<File?> _pickPhoto(BuildContext context) async {
+    final source = await _showSourcePicker(context);
+    if (source == null) return null;
+
     try {
-      final completer = Completer<AssetEntity?>();
-
-      // Build a theme that matches the app's design system
-      final base = InstaAssetPicker.themeData(const Color(0xFF742FE5));
-      final pickerTheme = base.copyWith(
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        appBarTheme: base.appBarTheme.copyWith(
-          backgroundColor: const Color(0xFFFFFFFF),
-          foregroundColor: const Color(0xFF742FE5),
-          elevation: 0,
-          titleTextStyle: const TextStyle(
-            color: Color(0xFF742FE5),
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-          iconTheme: const IconThemeData(color: Color(0xFF742FE5)),
-        ),
-        colorScheme: base.colorScheme.copyWith(
-          primary: const Color(0xFF742FE5),
-          surface: const Color(0xFFF8F9FA),
-          onSurface: const Color(0xFF742FE5),
-          secondary: const Color(0xFF742FE5),
-          onSecondary: Colors.white,
-        ),
-        canvasColor: const Color(0xFFF8F9FA),
-        cardColor: const Color(0xFFFFFFFF),
-        iconTheme: const IconThemeData(color: Color(0xFF742FE5)),
-        primaryIconTheme: const IconThemeData(color: Color(0xFF742FE5)),
-        textTheme: base.textTheme.apply(
-          bodyColor: const Color(0xFF742FE5),
-          displayColor: const Color(0xFF742FE5),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF742FE5),
-            textStyle: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-            ),
-          ),
-        ),
-        chipTheme: base.chipTheme.copyWith(
-          backgroundColor: const Color(0xFF742FE5).withAlpha(20),
-          selectedColor: const Color(0xFF742FE5),
-          labelStyle: const TextStyle(color: Color(0xFF742FE5)),
-        ),
-        dividerColor: const Color(0xFFF2F4F5),
+      final XFile? picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1920,
       );
+      if (picked == null) return null;
 
-      InstaAssetPicker.pickAssets(
-        context,
-        maxAssets: 1,
-        requestType: RequestType.image,
-        pickerConfig: InstaAssetPickerConfig(
-          cropDelegate: const InstaAssetCropDelegate(
-            cropRatios: [1.0],
-          ),
-          pickerTheme: pickerTheme,
-        ),
-        onCompleted: (stream) {
-          stream.listen(
-            (details) {
-              if (!completer.isCompleted) {
-                if (context.mounted) Navigator.of(context).pop();
-                completer.complete(
-                  details.selectedAssets.isNotEmpty
-                      ? details.selectedAssets.first
-                      : null,
-                );
-              }
-            },
-            onDone: () {
-              if (!completer.isCompleted) completer.complete(null);
-            },
-            onError: (_) {
-              if (!completer.isCompleted) completer.complete(null);
-            },
-            cancelOnError: true,
-          );
-        },
-      ).then((result) {
-        // If picker was dismissed without confirming (result is null/empty),
-        // complete the completer so we don't hang forever.
-        if (!completer.isCompleted) {
-          completer.complete(
-            result != null && result.isNotEmpty ? result.first : null,
-          );
-        }
-      });
-
-      return completer.future;
+      final file = File(picked.path);
+      final size = await file.length();
+      if (size > 10 * 1024 * 1024) {
+        throw MediaException('Fotoğraf çok büyük (maksimum 10MB)');
+      }
+      return file;
     } catch (e) {
+      if (e is MediaException) rethrow;
       _isError = true;
-      _errorMessage = 'Galeri erişimi reddedildi. Lütfen ayarlardan izin verin.';
+      _errorMessage = 'Fotoğraf seçilirken bir hata oluştu.';
       notifyListeners();
       return null;
     }
   }
 
-  /// Converts AssetEntity to File and validates size (max 10MB).
-  /// Throws exception if file is too large or conversion fails.
-  Future<File> _assetToFile(AssetEntity asset) async {
-    final file = await asset.file;
-    if (file == null) {
-      throw MediaException('Fotoğraf dosyasına erişilemedi');
-    }
-    final fileSize = await file.length();
-    if (fileSize > 10 * 1024 * 1024) {
-      throw MediaException('Fotoğraf çok büyük (maksimum 10MB)');
-    }
-    return file;
+  Future<ImageSource?> _showSourcePicker(BuildContext context) {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFAEB3B5),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Fotoğraf Ekle',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2E3335),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _SourceButton(
+                    icon: Icons.photo_library_outlined,
+                    label: 'Galeri',
+                    onTap: () =>
+                        Navigator.of(context).pop(ImageSource.gallery),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _SourceButton(
+                    icon: Icons.camera_alt_outlined,
+                    label: 'Kamera',
+                    onTap: () =>
+                        Navigator.of(context).pop(ImageSource.camera),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  /// Loads media list from the service and maps to UI models.
+  // ---------------------------------------------------------------------------
+  // Media list
+  // ---------------------------------------------------------------------------
+
   Future<void> _loadMediaList(String userId) async {
     if (_mediaList.isEmpty) {
       _isMediaLoading = true;
@@ -390,7 +321,6 @@ class ProfileViewModel extends ChangeNotifier {
     try {
       final serviceMediaList =
           await _mediaService.getMediaList(userId: userId);
-
       _mediaList = serviceMediaList.map(_mapMedia).toList();
       _isMediaLoading = false;
       notifyListeners();
@@ -399,7 +329,6 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Subscribes to realtime profile changes.
   void _subscribeToProfileChanges(String userId) {
     _profileChannel = _profileService.subscribeToProfileChanges(
       userId,
@@ -410,29 +339,26 @@ class ProfileViewModel extends ChangeNotifier {
     );
   }
 
-  /// Subscribes to realtime media changes.
   void _subscribeToMediaChanges(String userId) {
     _mediaChannel = _mediaService.subscribeToMediaChanges(
       userId,
       (event) {
         if (event.type == MediaEventType.insert && event.media != null) {
           final uiMedia = _mapMedia(event.media!);
-          // Avoid duplicate — only add if not already in list
-          final alreadyExists = _mediaList.any((m) => m.id == uiMedia.id);
-          if (!alreadyExists) {
+          if (!_mediaList.any((m) => m.id == uiMedia.id)) {
             _mediaList = [uiMedia, ..._mediaList];
             notifyListeners();
           }
-        } else if (event.type == MediaEventType.delete && event.media != null) {
-          final deletedId = event.media!.id;
-          _mediaList = _mediaList.where((m) => m.id != deletedId).toList();
+        } else if (event.type == MediaEventType.delete &&
+            event.media != null) {
+          _mediaList =
+              _mediaList.where((m) => m.id != event.media!.id).toList();
           notifyListeners();
         }
       },
     );
   }
 
-  /// Unsubscribes from all realtime channels.
   Future<void> _unsubscribeAll() async {
     if (_profileChannel != null) {
       await _profileService.unsubscribeFromProfileChanges(_profileChannel!);
@@ -445,10 +371,9 @@ class ProfileViewModel extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // Model mapping helpers
+  // Model mapping
   // ---------------------------------------------------------------------------
 
-  /// Maps service-layer Profile to UI Profile.
   ui.Profile _mapProfile(dynamic serviceProfile, String userId) {
     return ui.Profile(
       id: serviceProfile.id,
@@ -462,7 +387,6 @@ class ProfileViewModel extends ChangeNotifier {
     );
   }
 
-  /// Maps service-layer UserStats to UI UserStats.
   ui.UserStats _mapStats(dynamic serviceStats) {
     return ui.UserStats(
       aiLooksCount: serviceStats.aiLooksCount,
@@ -471,7 +395,6 @@ class ProfileViewModel extends ChangeNotifier {
     );
   }
 
-  /// Maps service-layer Media to UI Media.
   ui.Media _mapMedia(dynamic serviceMedia) {
     ui.MediaType uiType;
     switch (serviceMedia.type.value) {
@@ -481,12 +404,9 @@ class ProfileViewModel extends ChangeNotifier {
       case 'MODEL':
         uiType = ui.MediaType.model;
         break;
-      case 'UPLOAD':
       default:
         uiType = ui.MediaType.upload;
-        break;
     }
-
     return ui.Media(
       id: serviceMedia.id,
       type: uiType,
@@ -502,9 +422,6 @@ class ProfileViewModel extends ChangeNotifier {
   // Error handling
   // ---------------------------------------------------------------------------
 
-  /// Handles errors and sets appropriate error state with Turkish error messages.
-  ///
-  /// Validates Requirement 12
   void _handleError(dynamic error) {
     _isProfileLoading = false;
     _isMediaLoading = false;
@@ -526,7 +443,6 @@ class ProfileViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Maps PostgreSQL error codes to Turkish user-friendly messages.
   String _mapPostgrestError(String? code) {
     switch (code) {
       case 'PGRST116':
@@ -536,7 +452,6 @@ class ProfileViewModel extends ChangeNotifier {
       case '23503':
         return 'İlişkili kayıt bulunamadı.';
       case '42501':
-        return 'Bu işlem için yetkiniz yok.';
       case 'PGRST301':
         return 'Bu işlem için yetkiniz yok.';
       default:
@@ -548,5 +463,50 @@ class ProfileViewModel extends ChangeNotifier {
   void dispose() {
     _unsubscribeAll();
     super.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper widgets
+// ---------------------------------------------------------------------------
+
+class _SourceButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SourceButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF742FE5).withAlpha(15),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: const Color(0xFF742FE5), size: 28),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF742FE5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

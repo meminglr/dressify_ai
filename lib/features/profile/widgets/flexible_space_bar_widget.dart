@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/profile.dart';
-import '../models/user_stats.dart';
 import 'profile_info_section.dart';
 
 /// FlexibleSpaceBarWidget for the profile page header.
@@ -28,20 +27,10 @@ import 'profile_info_section.dart';
 class FlexibleSpaceBarWidget extends StatelessWidget {
   /// Profile data containing cover image URL
   final Profile profile;
-  
-  /// User statistics for the profile info section
-  final UserStats stats;
-  
-  /// Expanded height of the flexible space bar
-  static const double expandedHeight = 480.0;
-  
-  /// Collapsed height of the flexible space bar (AppBar default)
-  static const double collapsedHeight = 56.0;
 
   const FlexibleSpaceBarWidget({
     super.key,
     required this.profile,
-    required this.stats,
   });
 
   @override
@@ -126,7 +115,6 @@ class FlexibleSpaceBarWidget extends StatelessWidget {
       bottom: 32, // Spacing from bottom
       child: ProfileInfoSection(
         profile: profile,
-        stats: stats,
       ),
     );
   }

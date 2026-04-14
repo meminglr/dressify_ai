@@ -57,7 +57,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   late TabController _tabController;
   final ScrollController _nestedScrollController = ScrollController();
   bool _isCollapsed = false;
-  late ProfileViewModel _viewModel; // cached reference for safe dispose
+  double _collapseProgress = 0.0; // 0.0 = expanded, 1.0 = collapsed
+  late ProfileViewModel _viewModel;
 
   @override
   void initState() {
@@ -109,17 +110,19 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _onScroll() {
-    // Check if the flexible space is collapsed
     final screenWidth = MediaQuery.of(context).size.width;
     const collapsedHeight = 56.0;
-    final scrollOffset = _nestedScrollController.hasClients 
-        ? _nestedScrollController.offset 
+    final scrollOffset = _nestedScrollController.hasClients
+        ? _nestedScrollController.offset
         : 0.0;
-    
-    final isNowCollapsed = scrollOffset > (screenWidth - collapsedHeight - 50);
-    
-    if (isNowCollapsed != _isCollapsed) {
+
+    final maxScroll = screenWidth - collapsedHeight;
+    final progress = (scrollOffset / maxScroll).clamp(0.0, 1.0);
+    final isNowCollapsed = scrollOffset > (maxScroll - 50);
+
+    if (progress != _collapseProgress || isNowCollapsed != _isCollapsed) {
       setState(() {
+        _collapseProgress = progress;
         _isCollapsed = isNowCollapsed;
       });
     }
@@ -250,20 +253,19 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Builds content for each tab
   Widget _buildTabContent(ProfileViewModel viewModel, List<Media> mediaList, int tabIndex) {
-    // Show shimmer skeleton if media is still loading
-    if (viewModel.isMediaLoading) {
+    // Show shimmer only during initial load (list is empty AND loading)
+    if (viewModel.isMediaLoading && viewModel.mediaList.isEmpty) {
       return const MasonryShimmer();
     }
 
+    // Still loading but we already have data — show existing data
     if (mediaList.isEmpty) {
-      // Show upload button for Gardırop (index 1) and Modellerim (index 2)
       if (tabIndex == 1 || tabIndex == 2) {
         return _buildEmptyStateWithUpload(tabIndex);
       }
       return _buildEmptyMediaState();
     }
 
-    // Show grid with inline upload button for Gardırop and Modellerim
     final showUploadButton = tabIndex == 1 || tabIndex == 2;
 
     return CustomScrollView(
@@ -347,28 +349,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     final screenWidth = MediaQuery.of(context).size.width;
 
     return SliverAppBar(
-      expandedHeight: screenWidth, // 1:1 aspect ratio
+      expandedHeight: screenWidth,
       pinned: true,
       floating: false,
+      centerTitle: true,
       backgroundColor: const Color(0xFFF8F9FA),
       foregroundColor: const Color(0xFF1A1D1F),
+      // This title shows only when collapsed, always centered
+      title: _isCollapsed
+          ? Text(
+              viewModel.profile!.fullName,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A1D1F),
+              ),
+            )
+          : null,
       flexibleSpace: FlexibleSpaceBar(
-        title: AnimatedOpacity(
-          opacity: _isCollapsed ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 200),
-          child: Text(
-            viewModel.profile!.fullName,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1A1D1F),
-            ),
-          ),
-        ),
-        centerTitle: true,
         background: FlexibleSpaceBarWidget(
           profile: viewModel.profile!,
-          stats: viewModel.stats!,
         ),
         collapseMode: CollapseMode.parallax,
       ),
@@ -392,7 +392,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           button: true,
           child: IconButton(
             icon: Icon(
-              Icons.settings,
+              Iconsax.setting_2,
               color: _isCollapsed ? const Color(0xFF1A1D1F) : Colors.white,
             ),
             onPressed: () {
@@ -492,7 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           onPressed: null, // disabled while loading
         ),
         IconButton(
-          icon: const Icon(Icons.settings, color: Colors.white),
+          icon: const Icon(Iconsax.setting_2, color: Colors.white),
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -507,6 +507,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Builds TabBar as SliverPersistentHeader (Sub-task 11.3)
   Widget _buildTabBarHeader(ProfileViewModel viewModel) {
+    final stats = viewModel.stats;
     return SliverPersistentHeader(
       pinned: true,
       delegate: _TabBarDelegate(
@@ -514,9 +515,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         tabBar: ProfileTabBar(
           controller: _tabController,
           selectedIndex: _tabController.index,
-          onTabSelected: (index) {
-            // TabController handles the selection
-          },
+          onTabSelected: (index) {},
+          aiLooksCount: stats?.aiLooksCount ?? 0,
+          uploadsCount: stats?.uploadsCount ?? 0,
+          modelsCount: stats?.modelsCount ?? 0,
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -31,8 +32,18 @@ class DressifyApp extends StatelessWidget {
           return MaterialApp(
             title: 'Dressify AI',
             debugShowCheckedModeBanner: false,
-            // AppTheme imports adjusted to avoid error.
             theme: AppTheme.lightTheme,
+            // Turkish localization
+            locale: const Locale('tr', 'TR'),
+            supportedLocales: const [
+              Locale('tr', 'TR'),
+              Locale('en', 'US'),
+            ],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: authViewModel.isAuthenticated
                 ? const Home()
                 : const LoginScreen(),
