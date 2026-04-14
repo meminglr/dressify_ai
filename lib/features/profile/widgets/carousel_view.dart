@@ -27,23 +27,28 @@ class MediaCarouselView extends StatefulWidget {
 
 class _MediaCarouselViewState extends State<MediaCarouselView> {
   late final CarouselController _controller;
-  late int _currentIndex;
+  late final ValueNotifier<int> _currentIndexNotifier;
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
+    _currentIndexNotifier = ValueNotifier<int>(widget.initialIndex);
     _controller = CarouselController(initialItem: widget.initialIndex);
   }
 
   @override
   void dispose() {
+    _currentIndexNotifier.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final appBarHeight = AppBar().preferredSize.height + MediaQuery.of(context).padding.top;
+    final availableHeight = screenHeight - appBarHeight;
+    
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -56,30 +61,59 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
           tooltip: 'Geri',
         ),
         title: widget.mediaList.length > 1
-            ? Text(
-                '${_currentIndex + 1} / ${widget.mediaList.length}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+            ? ValueListenableBuilder<int>(
+                valueListenable: _currentIndexNotifier,
+                builder: (context, currentIndex, child) {
+                  return Text(
+                    '${currentIndex + 1} / ${widget.mediaList.length}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  );
+                },
               )
             : null,
         centerTitle: true,
       ),
-      body: CarouselView.weighted(
-        controller: _controller,
-        scrollDirection: Axis.vertical,
-        flexWeights: const [1, 7, 1],
-        itemSnapping: true,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is ScrollEndNotification) {
+            // Calculate current page when scroll ends
+            final screenHeight = MediaQuery.of(context).size.height;
+            final appBarHeight = AppBar().preferredSize.height + MediaQuery.of(context).padding.top;
+            final availableHeight = screenHeight - appBarHeight;
+            final itemHeight = availableHeight - 80;
+            
+            final scrollPosition = notification.metrics.pixels;
+            final newIndex = (scrollPosition / itemHeight).round();
+            
+            if (newIndex != _currentIndexNotifier.value && newIndex >= 0 && newIndex < widget.mediaList.length) {
+              _currentIndexNotifier.value = newIndex;
+            }
+          }
+          return false;
+        },
+        child: CarouselView(
+          controller: _controller,
+          scrollDirection: Axis.vertical,
+          itemSnapping: true,
+          // Main item size (slightly smaller to show peek)
+          itemExtent: availableHeight - 80, // Leave space for peek
+          // Shrink amount for non-focused items (creates peek effect)
+          shrinkExtent: availableHeight - 120, // Smaller = more visible peek
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          children: List.generate(widget.mediaList.length, (index) {
+            final media = widget.mediaList[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: _buildMediaItem(media, index == widget.initialIndex),
+              ),
+            );
+          }),
         ),
-        onTap: (index) => setState(() => _currentIndex = index),
-        children: List.generate(widget.mediaList.length, (index) {
-          final media = widget.mediaList[index];
-          return _buildMediaItem(media, index == widget.initialIndex);
-        }),
       ),
     );
   }
