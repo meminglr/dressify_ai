@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 /// StatsOverlay widget displays user statistics with optimized blur effect.
 ///
@@ -68,11 +69,12 @@ class StatsOverlay extends StatelessWidget {
   }
 
   Widget _buildStatItem(String label, int count) {
+    final formatted = NumberFormat.decimalPattern('tr').format(count);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          count.toString(),
+          formatted,
           style: GoogleFonts.beVietnamPro(
             fontSize: 24,
             fontWeight: FontWeight.bold,

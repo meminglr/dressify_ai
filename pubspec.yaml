@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   cached_network_image: ^3.4.1
+  insta_assets_picker: ^3.2.0
+  intl: ^0.20.2
   flutter_dotenv: ^6.0.0
   flutter_floating_bottom_bar: ^1.4.0
   google_fonts: ^8.0.2

@@ -57,6 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late TabController _tabController;
   final ScrollController _nestedScrollController = ScrollController();
   bool _isCollapsed = false;
+  late ProfileViewModel _viewModel; // cached reference for safe dispose
 
   @override
   void initState() {
@@ -68,8 +69,43 @@ class _ProfileScreenState extends State<ProfileScreen>
     
     // Load profile data on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ProfileViewModel>().loadProfile(widget.userId);
+      _viewModel = context.read<ProfileViewModel>();
+      _viewModel.loadProfile(widget.userId);
+      _viewModel.addListener(_onViewModelChanged);
     });
+  }
+
+  void _onViewModelChanged() {
+    if (!mounted) return;
+    final viewModel = context.read<ProfileViewModel>();
+
+    // Show success SnackBar
+    if (viewModel.successMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(viewModel.successMessage!),
+          backgroundColor: const Color(0xFF742FE5),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      viewModel.clearSuccessMessage();
+    }
+
+    // Show error SnackBar (non-critical errors only)
+    if (viewModel.isError && viewModel.profile != null && viewModel.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(viewModel.errorMessage!),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Tamam',
+            textColor: Colors.white,
+            onPressed: () => viewModel.clearError(),
+          ),
+        ),
+      );
+    }
   }
 
   void _onScroll() {
@@ -91,6 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
     _tabController.dispose();
     _nestedScrollController.removeListener(_onScroll);
     _nestedScrollController.dispose();
@@ -103,13 +140,68 @@ class _ProfileScreenState extends State<ProfileScreen>
       backgroundColor: const Color(0xFFF8F9FA),
       body: Consumer<ProfileViewModel>(
         builder: (context, viewModel, child) {
-          // Error state - only show if critical error
-          if (viewModel.isError && viewModel.profile == null) {
-            return _buildErrorState(viewModel);
-          }
-
-          // Show content immediately with skeleton/shimmer for loading parts
-          return _buildMainContent(viewModel);
+          return Stack(
+            children: [
+              // Main content
+              () {
+                if (viewModel.isError && viewModel.profile == null) {
+                  return _buildErrorState(viewModel);
+                }
+                return _buildMainContent(viewModel);
+              }(),
+              // Upload loading overlay
+              if (viewModel.isUploading)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: AbsorbPointer(
+                    absorbing: false, // allow scrolling, just show progress
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LinearProgressIndicator(
+                          backgroundColor: const Color(0xFF742FE5).withAlpha(40),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF742FE5),
+                          ),
+                        ),
+                        Container(
+                          width: double.infinity,
+                          color: const Color(0xFF742FE5).withAlpha(230),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Fotoğraf yükleniyor...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
         },
       ),
     );
@@ -209,13 +301,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           alignment: Alignment.centerLeft,
           child: GestureDetector(
             onTap: () {
-              // TODO: Implement photo upload
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$label özelliği yakında eklenecek'),
-                  backgroundColor: const Color(0xFF742FE5),
-                ),
-              );
+              final viewModel = context.read<ProfileViewModel>();
+              if (tabIndex == 1) {
+                viewModel.uploadGardiropPhoto(context);
+              } else {
+                viewModel.uploadModelPhoto(context);
+              }
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -282,6 +373,19 @@ class _ProfileScreenState extends State<ProfileScreen>
         collapseMode: CollapseMode.parallax,
       ),
       actions: [
+        // Camera/edit icon for avatar
+        Semantics(
+          label: 'Profil fotoğrafını düzenle',
+          button: true,
+          child: IconButton(
+            icon: Icon(
+              Iconsax.camera,
+              color: _isCollapsed ? const Color(0xFF1A1D1F) : Colors.white,
+            ),
+            onPressed: () => viewModel.uploadAvatarPhoto(context),
+            tooltip: 'Profil fotoğrafını değiştir',
+          ),
+        ),
         // Settings button with dynamic color
         Semantics(
           label: 'Ayarlar',
@@ -383,6 +487,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Iconsax.camera, color: Colors.white),
+          onPressed: null, // disabled while loading
+        ),
         IconButton(
           icon: const Icon(Icons.settings, color: Colors.white),
           onPressed: () {
@@ -589,13 +697,12 @@ class _ProfileScreenState extends State<ProfileScreen>
               hint: 'Fotoğraf yüklemek için dokunun',
               child: GestureDetector(
                 onTap: () {
-                  // TODO: Implement photo upload
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$buttonText özelliği yakında eklenecek'),
-                      backgroundColor: const Color(0xFF742FE5),
-                    ),
-                  );
+                  final viewModel = context.read<ProfileViewModel>();
+                  if (tabIndex == 1) {
+                    viewModel.uploadGardiropPhoto(context);
+                  } else {
+                    viewModel.uploadModelPhoto(context);
+                  }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

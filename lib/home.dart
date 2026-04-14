@@ -6,9 +6,13 @@ import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'core/theme/app_colors.dart';
+import 'core/services/supabase_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'features/profile/screens/profile_screen.dart';
 import 'features/profile/viewmodels/profile_view_model.dart';
+import 'services/profile_service.dart';
+import 'services/media_service.dart';
+import 'services/storage_service.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -27,7 +31,14 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
     super.initState();
     currentPage = 0;
     tabController = TabController(length: 4, vsync: this);
-    profileViewModel = ProfileViewModel(); // Tek instance oluştur
+    profileViewModel = ProfileViewModel(
+      profileService: ProfileService.instance(),
+      mediaService: MediaService(
+        SupabaseService.instance.client,
+        StorageService(SupabaseService.instance.client),
+      ),
+      storageService: StorageService(SupabaseService.instance.client),
+    );
     
     tabController.animation!.addListener(() {
       final value = tabController.animation!.value.round();
