@@ -1,15 +1,15 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// StatsOverlay widget displays user statistics with blur and shadow effects.
+/// StatsOverlay widget displays user statistics with optimized blur effect.
 ///
-/// This widget shows three statistics (AI Looks, Uploads, Models) with:
-/// - 12px backdrop blur effect
+/// This widget shows three statistics (AI Görünümler, Gardırop, Modellerim) with:
+/// - Optimized blur effect (using semi-transparent background instead of BackdropFilter)
 /// - Shadow effect (0px 25px 50px -12px rgba(0,0,0,0.25))
 /// - 16px border radius
 /// - Figma design colors and typography
 ///
+/// Performance optimized: Removed BackdropFilter for better FPS during tab switches
 /// Validates Requirements 3, 10
 class StatsOverlay extends StatelessWidget {
   final int aiLooksCount;
@@ -25,36 +25,40 @@ class StatsOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            offset: const Offset(0, 25),
-            blurRadius: 50,
-            spreadRadius: -12,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              offset: const Offset(0, 25),
+              blurRadius: 50,
+              spreadRadius: -12,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 41, vertical: 21),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.3),
+              // Use frosted glass effect without expensive BackdropFilter
+              color: Colors.black.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
+                width: 1,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildStatItem('AI LOOKS', aiLooksCount),
+                _buildStatItem('AI GÖRÜNÜMLER', aiLooksCount),
                 const SizedBox(width: 32),
-                _buildStatItem('UPLOADS', uploadsCount),
+                _buildStatItem('GARDIROP', uploadsCount),
                 const SizedBox(width: 32),
-                _buildStatItem('MODELS', modelsCount),
+                _buildStatItem('MODELLERIM', modelsCount),
               ],
             ),
           ),

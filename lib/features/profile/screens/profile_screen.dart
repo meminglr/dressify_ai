@@ -4,6 +4,7 @@ import '../viewmodels/profile_view_model.dart';
 import '../widgets/flexible_space_bar_widget.dart';
 import '../widgets/profile_tab_bar.dart';
 import '../widgets/masonry_grid_view.dart';
+import '../widgets/masonry_shimmer.dart';
 import '../widgets/carousel_view.dart';
 import '../models/media.dart';
 import '../../../screens/settings/settings_screen.dart';
@@ -54,11 +55,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _nestedScrollController = ScrollController();
+  bool _isCollapsed = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    
+    // Listen to scroll changes to update AppBar state
+    _nestedScrollController.addListener(_onScroll);
     
     // Load profile data on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -66,9 +71,27 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
   }
 
+  void _onScroll() {
+    // Check if the flexible space is collapsed
+    final screenWidth = MediaQuery.of(context).size.width;
+    const collapsedHeight = 56.0;
+    final scrollOffset = _nestedScrollController.hasClients 
+        ? _nestedScrollController.offset 
+        : 0.0;
+    
+    final isNowCollapsed = scrollOffset > (screenWidth - collapsedHeight - 50);
+    
+    if (isNowCollapsed != _isCollapsed) {
+      setState(() {
+        _isCollapsed = isNowCollapsed;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
+    _nestedScrollController.removeListener(_onScroll);
     _nestedScrollController.dispose();
     super.dispose();
   }
@@ -79,22 +102,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       backgroundColor: const Color(0xFFF8F9FA),
       body: Consumer<ProfileViewModel>(
         builder: (context, viewModel, child) {
-          // Loading state
-          if (viewModel.isLoading) {
-            return _buildLoadingState();
-          }
-
-          // Error state
-          if (viewModel.isError) {
+          // Error state - only show if critical error
+          if (viewModel.isError && viewModel.profile == null) {
             return _buildErrorState(viewModel);
           }
 
-          // Empty state (no profile data)
-          if (viewModel.profile == null || viewModel.stats == null) {
-            return _buildEmptyState();
-          }
-
-          // Main content
+          // Show content immediately with skeleton/shimmer for loading parts
           return _buildMainContent(viewModel);
         },
       ),
@@ -107,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       onRefresh: () => viewModel.refreshProfile(),
       color: const Color(0xFF742FE5),
       child: NestedScrollView(
-        controller: widget.scrollController,
+        controller: _nestedScrollController,
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             // SliverAppBar with FlexibleSpaceBar
@@ -121,7 +134,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           tabController: _tabController,
           parentTabController: widget.parentTabController,
           children: [
-            _buildTabContent(viewModel, viewModel.mediaList),
             _buildTabContent(
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.aiLook).toList(),
@@ -129,6 +141,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             _buildTabContent(
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.upload).toList(),
+            ),
+            _buildTabContent(
+              viewModel,
+              viewModel.mediaList.where((m) => m.type == MediaType.model).toList(),
             ),
           ],
         ),
@@ -138,6 +154,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Builds content for each tab
   Widget _buildTabContent(ProfileViewModel viewModel, List<Media> mediaList) {
+    // Show shimmer skeleton if media is still loading
+    if (viewModel.isMediaLoading) {
+      return const MasonryShimmer();
+    }
+
     if (mediaList.isEmpty) {
       return _buildEmptyMediaState();
     }
@@ -159,22 +180,50 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Builds SliverAppBar with FlexibleSpaceBar (Sub-task 11.2)
   Widget _buildSliverAppBar(ProfileViewModel viewModel) {
+    // Show skeleton if profile is loading
+    if (viewModel.isProfileLoading || viewModel.profile == null) {
+      return _buildSkeletonAppBar();
+    }
+
+    // 1:1 aspect ratio - height equals screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return SliverAppBar(
-      expandedHeight: 480.0,
-      pinned: false,
+      expandedHeight: screenWidth, // 1:1 aspect ratio
+      pinned: true,
       floating: false,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      flexibleSpace: FlexibleSpaceBarWidget(
-        profile: viewModel.profile!,
-        stats: viewModel.stats!,
+      backgroundColor: const Color(0xFFF8F9FA),
+      foregroundColor: const Color(0xFF1A1D1F),
+      flexibleSpace: FlexibleSpaceBar(
+        title: AnimatedOpacity(
+          opacity: _isCollapsed ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: Text(
+            viewModel.profile!.fullName,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1A1D1F),
+            ),
+          ),
+        ),
+        centerTitle: true,
+        background: FlexibleSpaceBarWidget(
+          profile: viewModel.profile!,
+          stats: viewModel.stats!,
+        ),
+        collapseMode: CollapseMode.parallax,
       ),
       actions: [
-        // Settings button
+        // Settings button with dynamic color
         Semantics(
           label: 'Ayarlar',
           button: true,
           child: IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
+            icon: Icon(
+              Icons.settings,
+              color: _isCollapsed ? const Color(0xFF1A1D1F) : Colors.white,
+            ),
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -184,6 +233,98 @@ class _ProfileScreenState extends State<ProfileScreen>
             },
             tooltip: 'Ayarlar',
           ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds skeleton AppBar while profile is loading
+  Widget _buildSkeletonAppBar() {
+    // 1:1 aspect ratio - height equals screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    return SliverAppBar(
+      expandedHeight: screenWidth, // 1:1 aspect ratio
+      pinned: true,
+      floating: false,
+      backgroundColor: const Color(0xFFF8F9FA),
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFE0E0E0),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(40),
+              bottomRight: Radius.circular(40),
+            ),
+          ),
+          child: Stack(
+            children: [
+              // Shimmer effect for the entire background
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(40),
+                    bottomRight: Radius.circular(40),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFFE0E0E0),
+                          const Color(0xFFF5F5F5),
+                          const Color(0xFFE0E0E0),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Skeleton elements at the bottom
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 60,
+                child: Column(
+                  children: [
+                    // Name skeleton
+                    Container(
+                      width: 200,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Stats skeleton
+                    Container(
+                      width: 300,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.settings, color: Colors.white),
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const SettingsScreen(),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -221,18 +362,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           mediaList: mediaList,
           initialIndex: index,
           heroTag: 'media_${media.id}',
-        ),
-      ),
-    );
-  }
-
-  /// Builds loading state (Sub-task 11.6)
-  Widget _buildLoadingState() {
-    return Center(
-      child: Semantics(
-        label: 'Profil yükleniyor',
-        child: const CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF742FE5)),
         ),
       ),
     );
@@ -293,40 +422,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  /// Builds empty state when no profile data (Sub-task 11.6)
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Semantics(
-              label: 'Profil bulunamadı ikonu',
-              child: const Icon(
-                Icons.person_off_outlined,
-                size: 64,
-                color: Color(0xFF5A6062),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Semantics(
-              label: 'Profil bulunamadı mesajı',
-              child: const Text(
-                'Profil bulunamadı',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF5A6062),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Builds empty media state (Sub-task 11.6)
   Widget _buildEmptyMediaState() {
     return Padding(
@@ -358,7 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           Semantics(
             label: 'İçerik ekleme önerisi',
             child: const Text(
-              'İlk AI look\'unuzu oluşturmak için "Yeni Üret" butonuna dokunun',
+              'İlk AI görünümünüzü oluşturmak için ana sayfaya gidin',
               style: TextStyle(
                 fontSize: 14,
                 color: Color(0xFF5A6062),
@@ -404,7 +499,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 }
 
 /// TabBarView with smart edge swipe:
-/// - On "All" tab (index 0) + right swipe → delegates to parent (navigation bar)
+/// - On "AI Görünümler" tab (index 0) + right swipe → delegates to parent (navigation bar)
 /// - Otherwise → normal tab swipe with real-time animation
 class _ProfileTabBarViewWithEdgeSwipe extends StatefulWidget {
   final TabController tabController;

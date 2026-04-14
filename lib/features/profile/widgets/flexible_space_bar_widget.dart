@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/profile.dart';
 import '../models/user_stats.dart';
 import 'profile_info_section.dart';
@@ -45,10 +46,8 @@ class FlexibleSpaceBarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FlexibleSpaceBar(
-      background: _buildBackground(),
-      collapseMode: CollapseMode.parallax,
-      centerTitle: true,
+    return RepaintBoundary(
+      child: _buildBackground(),
     );
   }
 
@@ -81,17 +80,16 @@ class FlexibleSpaceBarWidget extends StatelessWidget {
     final imageUrl = profile.avatarUrl ?? profile.coverImageUrl;
 
     if (imageUrl != null && imageUrl.isNotEmpty) {
-      return Image.network(
-        imageUrl,
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
         fit: BoxFit.cover,
         alignment: Alignment.topCenter,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return const ColoredBox(color: Color(0xFFF8F9FA));
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return _buildDefaultBackground();
-        },
+        placeholder: (context, url) => const ColoredBox(
+          color: Color(0xFFF8F9FA),
+        ),
+        errorWidget: (context, url, error) => _buildDefaultBackground(),
+        memCacheHeight: 800, // Optimize for header size
+        maxHeightDiskCache: 800,
       );
     }
 
@@ -105,8 +103,8 @@ class FlexibleSpaceBarWidget extends StatelessWidget {
 
   /// Builds the gradient overlay from transparent to dark
   Widget _buildGradientOverlay() {
-    return Container(
-      decoration: const BoxDecoration(
+    return const DecoratedBox(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media.dart';
 
 /// MediaCarouselView - Material 3 Hero Carousel layout.
@@ -84,26 +85,16 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
   }
 
   Widget _buildMediaItem(Media media, bool isHeroItem) {
-    final image = Image.network(
-      media.imageUrl,
+    final image = CachedNetworkImage(
+      imageUrl: media.imageUrl,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return Container(
-          color: const Color(0xFFEEEEEE),
-          child: Center(
-            child: CircularProgressIndicator(
-              value: progress.expectedTotalBytes != null
-                  ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                  : null,
-              strokeWidth: 2,
-            ),
-          ),
-        );
-      },
-      errorBuilder: (_, __, ___) => Container(
+      fadeInDuration: Duration.zero, // No fade-in animation
+      fadeOutDuration: Duration.zero, // No fade-out animation
+      placeholderFadeInDuration: Duration.zero, // No placeholder fade
+      // Remove placeholder completely for instant display
+      errorWidget: (context, url, error) => Container(
         color: const Color(0xFFEEEEEE),
         child: const Center(
           child: Column(
@@ -119,10 +110,44 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
           ),
         ),
       ),
+      memCacheHeight: 1200, // Optimize for carousel full-screen size
+      maxHeightDiskCache: 1200,
     );
 
     if (isHeroItem) {
-      return Hero(tag: widget.heroTag, child: image);
+      return Hero(
+        tag: widget.heroTag,
+        // Disable default Hero overlay/scrim
+        createRectTween: (begin, end) {
+          return RectTween(begin: begin, end: end);
+        },
+        // Use Material to ensure smooth transition
+        child: Material(
+          color: Colors.transparent,
+          type: MaterialType.transparency,
+          child: image,
+        ),
+        flightShuttleBuilder: (
+          BuildContext flightContext,
+          Animation<double> animation,
+          HeroFlightDirection flightDirection,
+          BuildContext fromHeroContext,
+          BuildContext toHeroContext,
+        ) {
+          // Use the cached image during flight for smooth animation
+          return Material(
+            color: Colors.transparent,
+            type: MaterialType.transparency,
+            child: CachedNetworkImage(
+              imageUrl: media.imageUrl,
+              fit: BoxFit.cover,
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
+              memCacheHeight: 1200,
+            ),
+          );
+        },
+      );
     }
     return image;
   }

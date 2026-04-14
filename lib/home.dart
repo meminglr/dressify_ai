@@ -20,12 +20,15 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   late int currentPage;
   late TabController tabController;
+  late ProfileViewModel profileViewModel; // Singleton ViewModel
 
   @override
   void initState() {
     super.initState();
     currentPage = 0;
     tabController = TabController(length: 4, vsync: this);
+    profileViewModel = ProfileViewModel(); // Tek instance oluştur
+    
     tabController.animation!.addListener(() {
       final value = tabController.animation!.value.round();
       if (value != currentPage && mounted) {
@@ -39,6 +42,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     tabController.dispose();
+    profileViewModel.dispose(); // ViewModel'i dispose et
     super.dispose();
   }
 
@@ -84,8 +88,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             HomeScreen(controller: controller),
             _buildPlaceholderContent("Keşfet"),
             _buildPlaceholderContent('Gardırop'),
-            ChangeNotifierProvider(
-              create: (_) => ProfileViewModel(),
+            ChangeNotifierProvider.value(
+              value: profileViewModel, // Mevcut instance'ı kullan
               child: ProfileScreen(
                 scrollController: controller,
                 parentTabController: tabController,

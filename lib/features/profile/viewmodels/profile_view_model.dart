@@ -16,8 +16,9 @@ class ProfileViewModel extends ChangeNotifier {
   UserStats? _stats;
   List<Media> _mediaList = [];
 
-  // UI state
-  bool _isLoading = false;
+  // UI state - separate loading states for different data
+  bool _isProfileLoading = false;
+  bool _isMediaLoading = false;
   bool _isError = false;
   String? _errorMessage;
   int _selectedTabIndex = 0;
@@ -26,7 +27,8 @@ class ProfileViewModel extends ChangeNotifier {
   Profile? get profile => _profile;
   UserStats? get stats => _stats;
   List<Media> get mediaList => _filteredMediaList;
-  bool get isLoading => _isLoading;
+  bool get isProfileLoading => _isProfileLoading;
+  bool get isMediaLoading => _isMediaLoading;
   bool get isError => _isError;
   String? get errorMessage => _errorMessage;
   int get selectedTabIndex => _selectedTabIndex;
@@ -61,25 +63,41 @@ class ProfileViewModel extends ChangeNotifier {
   /// If [userId] is null, loads the current user's profile.
   /// Uses MockProfileData for test data during development.
   ///
-  /// Sets loading state, fetches data, and handles errors.
+  /// Loads profile/stats immediately (fast), then loads media list separately.
+  /// Only shows loading if data doesn't exist yet (prevents shimmer on cached data).
   /// Validates Requirements 7, 9, 11
   Future<void> loadProfile(String? userId) async {
-    _isLoading = true;
     _isError = false;
     _errorMessage = null;
-    notifyListeners();
 
     try {
-      // Simulate network delay
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Only show profile loading if profile doesn't exist
+      if (_profile == null || _stats == null) {
+        _isProfileLoading = true;
+        notifyListeners();
 
-      // Load mock data
-      _profile = MockProfileData.getMockProfile();
-      _stats = MockProfileData.getMockStats();
-      _mediaList = MockProfileData.getMockMediaList();
+        // Simulate fast profile/stats load
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        _profile = MockProfileData.getMockProfile();
+        _stats = MockProfileData.getMockStats();
+        _isProfileLoading = false;
+        notifyListeners();
+      }
 
-      _isLoading = false;
-      notifyListeners();
+      // Only show media loading if media list is empty
+      if (_mediaList.isEmpty) {
+        _isMediaLoading = true;
+        notifyListeners();
+
+        // Simulate slower media load
+        await Future.delayed(const Duration(milliseconds: 400));
+        
+        _mediaList = MockProfileData.getMockMediaList();
+        _isMediaLoading = false;
+        notifyListeners();
+      }
+      
     } catch (error) {
       _handleError(error);
     }
@@ -128,7 +146,8 @@ class ProfileViewModel extends ChangeNotifier {
   /// Converts different error types to user-friendly Turkish messages.
   /// Validates Requirement 12
   void _handleError(dynamic error) {
-    _isLoading = false;
+    _isProfileLoading = false;
+    _isMediaLoading = false;
     _isError = true;
 
     // In a real app, you would check for specific error types

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media.dart';
 
 /// GridItem widget for displaying media items in the masonry grid layout.
@@ -30,8 +31,13 @@ class GridItem extends StatelessWidget {
     return RepaintBoundary(
       child: Hero(
         tag: heroTag,
+        // Disable default Hero overlay/scrim for clean transition
+        createRectTween: (begin, end) {
+          return RectTween(begin: begin, end: end);
+        },
         child: Material(
           color: Colors.transparent,
+          type: MaterialType.transparency,
           borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -56,41 +62,27 @@ class GridItem extends StatelessWidget {
     );
   }
 
-  /// Builds the media image with NetworkImage
+  /// Builds the media image with CachedNetworkImage for better performance
   Widget _buildImage() {
-    return Image.network(
-      media.imageUrl,
+    return CachedNetworkImage(
+      imageUrl: media.imageUrl,
       fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        
-        return Container(
-          color: const Color(0xFFF8F9FA),
-          child: Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                  : null,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF742FE5),
-              ),
-            ),
+      fadeInDuration: Duration.zero, // No fade animation for instant display
+      fadeOutDuration: Duration.zero,
+      placeholderFadeInDuration: Duration.zero,
+      // No placeholder - instant display from cache or network
+      errorWidget: (context, url, error) => Container(
+        color: const Color(0xFFF8F9FA),
+        child: const Center(
+          child: Icon(
+            Icons.broken_image_outlined,
+            size: 48,
+            color: Color(0xFF5A6062),
           ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) {
-        return Container(
-          color: const Color(0xFFF8F9FA),
-          child: const Center(
-            child: Icon(
-              Icons.broken_image_outlined,
-              size: 48,
-              color: Color(0xFF5A6062),
-            ),
-          ),
-        );
-      },
+        ),
+      ),
+      memCacheWidth: 400, // Optimize memory usage
+      maxWidthDiskCache: 400, // Optimize disk cache
     );
   }
 

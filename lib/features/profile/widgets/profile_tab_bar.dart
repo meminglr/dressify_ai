@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// ProfileTabBar widget displays a tab bar with three tabs.
 ///
-/// This widget shows three tabs (All, AI Looks, Uploads) with:
+/// This widget shows three tabs (AI Görünümler, Gardırop, Modellerim) with:
 /// - Modern pill-style design matching the app's navigation bar
 /// - Tab Label Typography: Be Vietnam Pro Bold, 14px
 /// - Active Tab: Primary color background with white text
@@ -55,9 +55,9 @@ class ProfileTabBar extends StatelessWidget {
           indicatorPadding: const EdgeInsets.all(4),
           labelPadding: EdgeInsets.zero,
           tabs: [
-            _buildTab('All', 0),
-            _buildTab('AI Looks', 1),
-            _buildTab('Uploads', 2),
+            _buildTab('AI Görünümler', 0),
+            _buildTab('Gardırop', 1),
+            _buildTab('Modellerim', 2),
           ],
           labelStyle: GoogleFonts.beVietnamPro(
             fontSize: 14,
