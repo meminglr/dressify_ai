@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/profile_view_model.dart';
 import '../widgets/flexible_space_bar_widget.dart';
@@ -137,14 +138,17 @@ class _ProfileScreenState extends State<ProfileScreen>
             _buildTabContent(
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.aiLook).toList(),
+              0,
             ),
             _buildTabContent(
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.upload).toList(),
+              1,
             ),
             _buildTabContent(
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.model).toList(),
+              2,
             ),
           ],
         ),
@@ -153,20 +157,31 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// Builds content for each tab
-  Widget _buildTabContent(ProfileViewModel viewModel, List<Media> mediaList) {
+  Widget _buildTabContent(ProfileViewModel viewModel, List<Media> mediaList, int tabIndex) {
     // Show shimmer skeleton if media is still loading
     if (viewModel.isMediaLoading) {
       return const MasonryShimmer();
     }
 
     if (mediaList.isEmpty) {
+      // Show upload button for Gardırop (index 1) and Modellerim (index 2)
+      if (tabIndex == 1 || tabIndex == 2) {
+        return _buildEmptyStateWithUpload(tabIndex);
+      }
       return _buildEmptyMediaState();
     }
 
+    // Show grid with inline upload button for Gardırop and Modellerim
+    final showUploadButton = tabIndex == 1 || tabIndex == 2;
+
     return CustomScrollView(
       slivers: [
+        if (showUploadButton)
+          SliverToBoxAdapter(
+            child: _buildInlineUploadButton(tabIndex),
+          ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
           sliver: MasonryGridView(
             mediaList: mediaList,
             onItemTap: (index) {
@@ -175,6 +190,58 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ],
+    );
+  }
+
+  /// Inline upload button shown above the grid
+  Widget _buildInlineUploadButton(int tabIndex) {
+    final isGardirop = tabIndex == 1;
+    final label = isGardirop ? 'Kıyafet Ekle' : 'Model Ekle';
+    final icon = isGardirop ? Iconsax.gallery_add : Iconsax.camera;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Semantics(
+        label: '$label butonu',
+        button: true,
+        hint: 'Fotoğraf yüklemek için dokunun',
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onTap: () {
+              // TODO: Implement photo upload
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$label özelliği yakında eklenecek'),
+                  backgroundColor: const Color(0xFF742FE5),
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF742FE5).withAlpha(20),
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: const Color(0xFF742FE5), size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF742FE5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -294,7 +361,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       width: 200,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -304,7 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       width: 300,
                       height: 80,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
@@ -378,7 +445,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             Semantics(
               label: 'Hata ikonu',
               child: const Icon(
-                Icons.error_outline,
+                Iconsax.warning_2,
                 size: 64,
                 color: Color(0xFFE53935),
               ),
@@ -432,7 +499,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           Semantics(
             label: 'Henüz içerik yok ikonu',
             child: const Icon(
-              Icons.photo_library_outlined,
+              Iconsax.gallery,
               size: 64,
               color: Color(0xFF5A6062),
             ),
@@ -462,6 +529,104 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Builds empty state with upload button for Gardırop and Modellerim tabs
+  Widget _buildEmptyStateWithUpload(int tabIndex) {
+    final isGardirop = tabIndex == 1;
+    final title = isGardirop ? 'Gardırop Boş' : 'Model Eklenmemiş';
+    final description = isGardirop
+        ? 'Kıyafet fotoğrafları ekleyerek gardırobunuzu oluşturun'
+        : 'Vücut fotoğrafınızı ekleyerek modelinizi oluşturun';
+    final buttonText = isGardirop ? 'Kıyafet Ekle' : 'Model Ekle';
+    final icon = isGardirop ? Iconsax.bag_2 : Iconsax.profile_circle;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Semantics(
+              label: 'Boş durum ikonu',
+              child: Icon(
+                icon,
+                size: 80,
+                color: const Color(0xFF742FE5).withValues(alpha: 0.3),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Semantics(
+              label: title,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A1D1F),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              label: description,
+              child: Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF5A6062),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Semantics(
+              label: '$buttonText butonu',
+              button: true,
+              hint: 'Fotoğraf yüklemek için dokunun',
+              child: GestureDetector(
+                onTap: () {
+                  // TODO: Implement photo upload
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$buttonText özelliği yakında eklenecek'),
+                      backgroundColor: const Color(0xFF742FE5),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF742FE5).withAlpha(20),
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isGardirop ? Iconsax.gallery_add : Iconsax.camera,
+                        color: const Color(0xFF742FE5),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        buttonText,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF742FE5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
