@@ -9,6 +9,10 @@ import '../widgets/masonry_shimmer.dart';
 import '../widgets/carousel_view.dart';
 import '../models/media.dart';
 import '../../../screens/settings/settings_screen.dart';
+import '../../trendyol/screens/product_detail_screen.dart';
+import '../../trendyol/viewmodels/product_detail_view_model.dart';
+import '../../trendyol/services/trendyol_service.dart';
+import '../../trendyol/services/saved_product_service.dart';
 
 /// ProfileScreen displays the user profile page with all features.
 ///
@@ -57,8 +61,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   late TabController _tabController;
   final ScrollController _nestedScrollController = ScrollController();
   bool _isCollapsed = false;
-  double _collapseProgress = 0.0; // 0.0 = expanded, 1.0 = collapsed
   late ProfileViewModel _viewModel;
+  bool _viewModelListenerAttached = false;
 
   @override
   void initState() {
@@ -70,9 +74,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     
     // Load profile data on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _viewModel = context.read<ProfileViewModel>();
       _viewModel.loadProfile(widget.userId);
-      _viewModel.addListener(_onViewModelChanged);
+      if (!_viewModelListenerAttached) {
+        _viewModel.addListener(_onViewModelChanged);
+        _viewModelListenerAttached = true;
+      }
     });
   }
 
@@ -117,12 +125,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         : 0.0;
 
     final maxScroll = screenWidth - collapsedHeight;
-    final progress = (scrollOffset / maxScroll).clamp(0.0, 1.0);
     final isNowCollapsed = scrollOffset > (maxScroll - 50);
 
-    if (progress != _collapseProgress || isNowCollapsed != _isCollapsed) {
+    // Only rebuild when collapse state changes (not on every scroll pixel)
+    if (isNowCollapsed != _isCollapsed) {
       setState(() {
-        _collapseProgress = progress;
         _isCollapsed = isNowCollapsed;
       });
     }
@@ -130,7 +137,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
+    if (_viewModelListenerAttached) {
+      _viewModel.removeListener(_onViewModelChanged);
+    }
     _tabController.dispose();
     _nestedScrollController.removeListener(_onScroll);
     _nestedScrollController.dispose();
@@ -237,7 +246,9 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             _buildTabContent(
               viewModel,
-              viewModel.mediaList.where((m) => m.type == MediaType.upload).toList(),
+              viewModel.mediaList.where((m) => 
+                m.type == MediaType.upload || m.type == MediaType.trendyolProduct
+              ).toList(),
               1,
             ),
             _buildTabContent(
@@ -524,7 +535,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  /// Opens carousel view (Sub-task 11.5)
+  /// Opens carousel view or product detail (Sub-task 11.5)
   void _openCarousel(
     BuildContext context,
     ProfileViewModel viewModel,
@@ -533,6 +544,27 @@ class _ProfileScreenState extends State<ProfileScreen>
   ) {
     final media = mediaList[index];
 
+    // If it's a Trendyol product, navigate to ProductDetailScreen
+    if (media.type == MediaType.trendyolProduct) {
+      // Extract product ID from media tag (stored as product ID)
+      final productId = media.tag;
+      if (productId != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider(
+              create: (_) => ProductDetailViewModel(
+                trendyolService: TrendyolService(),
+                savedProductService: SavedProductService(),
+              ),
+              child: ProductDetailScreen(productId: productId),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Otherwise, open carousel view
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MediaCarouselView(
@@ -767,7 +799,8 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_TabBarDelegate oldDelegate) {
+  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) {
+    // Only rebuild if selected index actually changed
     return selectedIndex != oldDelegate.selectedIndex;
   }
 }

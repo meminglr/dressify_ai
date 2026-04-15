@@ -9,7 +9,7 @@
       "env": {
         "FIGMA_PERSONAL_ACCESS_TOKEN": ""
       },
-      "disabled": false,
+      "disabled": true,
       "autoApprove": []
     }
   }

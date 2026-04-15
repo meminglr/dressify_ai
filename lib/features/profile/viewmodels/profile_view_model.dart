@@ -111,14 +111,18 @@ class ProfileViewModel extends ChangeNotifier {
   }
 
   void clearError() {
-    _isError = false;
-    _errorMessage = null;
-    notifyListeners();
+    if (_isError || _errorMessage != null) {
+      _isError = false;
+      _errorMessage = null;
+      notifyListeners();
+    }
   }
 
   void clearSuccessMessage() {
-    _successMessage = null;
-    notifyListeners();
+    if (_successMessage != null) {
+      _successMessage = null;
+      notifyListeners();
+    }
   }
 
   Future<void> uploadGardiropPhoto(BuildContext context) async {
@@ -403,6 +407,9 @@ class ProfileViewModel extends ChangeNotifier {
         break;
       case 'MODEL':
         uiType = ui.MediaType.model;
+        break;
+      case 'TRENDYOL_PRODUCT':
+        uiType = ui.MediaType.trendyolProduct;
         break;
       default:
         uiType = ui.MediaType.upload;

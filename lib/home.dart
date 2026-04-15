@@ -10,6 +10,10 @@ import 'core/services/supabase_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'features/profile/screens/profile_screen.dart';
 import 'features/profile/viewmodels/profile_view_model.dart';
+import 'features/trendyol/screens/product_search_screen.dart';
+import 'features/trendyol/viewmodels/product_search_view_model.dart';
+import 'features/trendyol/services/trendyol_service.dart';
+import 'features/trendyol/services/saved_product_service.dart';
 import 'services/profile_service.dart';
 import 'services/media_service.dart';
 import 'services/storage_service.dart';
@@ -25,12 +29,15 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   late int currentPage;
   late TabController tabController;
   late ProfileViewModel profileViewModel; // Singleton ViewModel
+  late ProductSearchViewModel productSearchViewModel; // Singleton ViewModel
 
   @override
   void initState() {
     super.initState();
     currentPage = 0;
     tabController = TabController(length: 4, vsync: this);
+    
+    // Initialize ProfileViewModel
     profileViewModel = ProfileViewModel(
       profileService: ProfileService.instance(),
       mediaService: MediaService(
@@ -38,6 +45,12 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         StorageService(SupabaseService.instance.client),
       ),
       storageService: StorageService(SupabaseService.instance.client),
+    );
+    
+    // Initialize ProductSearchViewModel
+    productSearchViewModel = ProductSearchViewModel(
+      trendyolService: TrendyolService(),
+      savedProductService: SavedProductService(),
     );
     
     tabController.animation!.addListener(() {
@@ -54,6 +67,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   void dispose() {
     tabController.dispose();
     profileViewModel.dispose(); // ViewModel'i dispose et
+    productSearchViewModel.dispose(); // ViewModel'i dispose et
     super.dispose();
   }
 
@@ -97,7 +111,10 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
           physics: const BouncingScrollPhysics(),
           children: [
             HomeScreen(controller: controller),
-            _buildPlaceholderContent("Keşfet"),
+            ChangeNotifierProvider.value(
+              value: productSearchViewModel, // Mevcut instance'ı kullan
+              child: const ProductSearchScreen(),
+            ),
             _buildPlaceholderContent('Gardırop'),
             ChangeNotifierProvider.value(
               value: profileViewModel, // Mevcut instance'ı kullan
@@ -120,7 +137,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             ),
             tabs: [
               _buildTab(Iconsax.home, 0),
-              _buildTab(Iconsax.discover, 1),
+              _buildTab(Iconsax.shop, 1),
               _buildTab(Iconsax.category, 2),
               _buildTab(Iconsax.user, 3),
             ],

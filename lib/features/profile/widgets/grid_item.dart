@@ -49,8 +49,13 @@ class GridItem extends StatelessWidget {
                 // Media image
                 _buildImage(),
                 
-                // Tag overlay (if tag exists)
-                if (media.tag != null) _buildTagOverlay(),
+                // Trendyol badge (top-right corner)
+                if (media.type == MediaType.trendyolProduct)
+                  _buildTrendyolBadge(),
+                
+                // Tag overlay (if tag exists and not Trendyol product)
+                if (media.tag != null && media.type != MediaType.trendyolProduct) 
+                  _buildTagOverlay(),
                 
                 // Hover/press overlay
                 _buildHoverOverlay(),
@@ -106,6 +111,38 @@ class GridItem extends StatelessWidget {
             letterSpacing: 0.8,
             color: Colors.white,
             height: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds Trendyol badge for product items
+  Widget _buildTrendyolBadge() {
+    return Positioned(
+      top: 6,
+      right: 6,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF27A1A), // Trendyol orange
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(25),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Text(
+          'T',
+          style: TextStyle(
+            fontFamily: 'Be Vietnam Pro',
+            fontWeight: FontWeight.w700,
+            fontSize: 10,
+            color: Colors.white,
+            height: 1.0,
           ),
         ),
       ),

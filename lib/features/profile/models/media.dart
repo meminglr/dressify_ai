@@ -10,6 +10,9 @@ enum MediaType {
 
   /// User model photos
   model,
+
+  /// Trendyol products saved to wardrobe
+  trendyolProduct,
 }
 
 /// Media model representing user media content for the profile page.

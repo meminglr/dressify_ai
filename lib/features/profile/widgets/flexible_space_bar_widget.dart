@@ -92,16 +92,18 @@ class FlexibleSpaceBarWidget extends StatelessWidget {
 
   /// Builds the gradient overlay from transparent to dark
   Widget _buildGradientOverlay() {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0x00000000), // Transparent
-            Color(0xB3000000), // rgba(0,0,0,0.7)
-          ],
-          stops: [0.0, 1.0],
+    return const RepaintBoundary(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0x00000000), // Transparent
+              Color(0xB3000000), // rgba(0,0,0,0.7)
+            ],
+            stops: [0.0, 1.0],
+          ),
         ),
       ),
     );
