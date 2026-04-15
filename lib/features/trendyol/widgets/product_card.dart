@@ -51,29 +51,12 @@ class ProductCard extends StatelessWidget {
                             fit: BoxFit.cover,
                             memCacheWidth: 400,
                             memCacheHeight: 600,
-                            placeholder: (_, __) => Container(
-                              color: AppColors.surfaceContainerLow,
-                            ),
-                            errorWidget: (_, __, ___) => Container(
-                              color: AppColors.surfaceContainerLow,
-                              child: const Center(
-                                child: Icon(
-                                  Iconsax.image,
-                                  color: AppColors.outlineVariant,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
+                            placeholder: (_, __) => const _ImagePlaceholder(),
+                            errorWidget: (_, __, ___) => const _ImageErrorWidget(),
                           )
                         : Container(
                             color: AppColors.surfaceContainerLow,
-                            child: const Center(
-                              child: Icon(
-                                Iconsax.image,
-                                color: AppColors.outlineVariant,
-                                size: 32,
-                              ),
-                            ),
+                            child: const _ImageErrorWidget(),
                           ),
                     // İndirim badge
                     if (product.discountPct > 0)
@@ -166,6 +149,33 @@ class ProductCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Private const widgets for better performance
+class _ImagePlaceholder extends StatelessWidget {
+  const _ImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.surfaceContainerLow,
+    );
+  }
+}
+
+class _ImageErrorWidget extends StatelessWidget {
+  const _ImageErrorWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(
+        Iconsax.image,
+        color: AppColors.outlineVariant,
+        size: 32,
       ),
     );
   }

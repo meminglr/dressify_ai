@@ -158,27 +158,29 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
                 size: 22,
               ),
             ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: AppColors.surfaceContainerLow,
-                        shape: BoxShape.circle,
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (_, value, __) => value.text.isNotEmpty
+                  ? IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surfaceContainerLow,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: AppColors.outlineVariant,
+                          size: 16,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.close,
-                        color: AppColors.outlineVariant,
-                        size: 16,
-                      ),
-                    ),
-                    onPressed: () {
-                      _searchController.clear();
-                      viewModel.updateSearchQuery('');
-                      setState(() {});
-                    },
-                  )
-                : null,
+                      onPressed: () {
+                        _searchController.clear();
+                        viewModel.updateSearchQuery('');
+                      },
+                    )
+                  : const SizedBox.shrink(),
+            ),
             filled: false,
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
@@ -189,7 +191,6 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             ),
           ),
           onChanged: (value) {
-            setState(() {});
             viewModel.updateSearchQuery(value);
           },
           onSubmitted: (value) {
@@ -396,23 +397,27 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
   }
 
   void _showFilterBottomSheet(BuildContext context, ProductSearchViewModel viewModel) {
+    // Local state for immediate UI feedback
+    bool localFreeShipping = viewModel.freeShippingOnly;
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: EdgeInsets.fromLTRB(
-          24,
-          12,
-          24,
-          MediaQuery.of(context).viewInsets.bottom + 32,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (_, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            12,
+            24,
+            MediaQuery.of(context).viewInsets.bottom + 32,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
           children: [
             // Handle bar
             Container(
@@ -442,8 +447,11 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
                     onPressed: () {
                       _minPriceController.clear();
                       _maxPriceController.clear();
+                      setSheetState(() {
+                        localFreeShipping = false;
+                      });
                       viewModel.clearFilters();
-                      Navigator.pop(context);
+                      Navigator.pop(sheetContext);
                     },
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,
@@ -594,17 +602,20 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             // Ücretsiz kargo
             GestureDetector(
               onTap: () {
-                viewModel.updateFilters(freeShipping: !viewModel.freeShippingOnly);
+                setSheetState(() {
+                  localFreeShipping = !localFreeShipping;
+                });
+                viewModel.updateFilters(freeShipping: localFreeShipping);
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: viewModel.freeShippingOnly
+                  color: localFreeShipping
                       ? AppColors.primary.withOpacity(0.1)
                       : AppColors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: viewModel.freeShippingOnly
+                    color: localFreeShipping
                         ? AppColors.primary
                         : Colors.transparent,
                     width: 1.5,
@@ -613,10 +624,10 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
                 child: Row(
                   children: [
                     Icon(
-                      viewModel.freeShippingOnly
+                      localFreeShipping
                           ? Iconsax.tick_circle5
                           : Iconsax.tick_circle,
-                      color: viewModel.freeShippingOnly
+                      color: localFreeShipping
                           ? AppColors.primary
                           : AppColors.outlineVariant,
                       size: 24,
@@ -641,7 +652,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context);
+                  Navigator.pop(sheetContext);
                   if (viewModel.searchQuery.isNotEmpty) {
                     viewModel.searchProducts();
                   }
@@ -666,6 +677,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -727,6 +739,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             }
             final product = viewModel.products[index];
             return ProductCard(
+              key: ValueKey(product.id), // Key for better performance
               product: product,
               onTap: () {
                 Navigator.of(context).push(

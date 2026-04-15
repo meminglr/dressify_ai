@@ -189,32 +189,36 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             ]
                           : product.images.asMap().entries.map((entry) {
                               final url = entry.value;
+                              final isFirstImage = entry.key == 0;
                               return ClipRRect(
-                                  child: CachedNetworkImage(
-                                    imageUrl: url,
-                                    // İlk görsel için ProductCard'daki cache key'i kullan
-                                    // → network isteği olmadan cache'den gelir
-                                    cacheKey: entry.key == 0
-                                        ? 'product_${product.id}_thumb'
-                                        : 'product_${product.id}_img_${entry.key}',
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    placeholder: (_, __) => Container(
-                                      color: AppColors.surfaceContainerLow,
-                                    ),
-                                    errorWidget: (_, __, ___) => Container(
-                                      color: AppColors.surfaceContainerLow,
-                                      child: const Center(
-                                        child: Icon(
-                                          Iconsax.image,
-                                          color: AppColors.outlineVariant,
-                                          size: 48,
-                                        ),
+                                child: CachedNetworkImage(
+                                  imageUrl: url,
+                                  // İlk görsel için ProductCard'daki cache key'i kullan
+                                  // → network isteği olmadan cache'den gelir
+                                  cacheKey: isFirstImage
+                                      ? 'product_${product.id}_thumb'
+                                      : 'product_${product.id}_img_${entry.key}',
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  // Bellek optimizasyonu için boyut sınırı
+                                  memCacheWidth: 800,
+                                  memCacheHeight: 1200,
+                                  placeholder: (_, __) => Container(
+                                    color: AppColors.surfaceContainerLow,
+                                  ),
+                                  errorWidget: (_, __, ___) => Container(
+                                    color: AppColors.surfaceContainerLow,
+                                    child: const Center(
+                                      child: Icon(
+                                        Iconsax.image,
+                                        color: AppColors.outlineVariant,
+                                        size: 48,
                                       ),
                                     ),
                                   ),
-                                );
+                                ),
+                              );
                             }).toList(),
                     ),
                   );
@@ -511,155 +515,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             
             // Reviews list or loading/empty state
             if (viewModel.isLoadingReviews)
-              _buildReviewsLoading()
+              const _ReviewsLoadingSkeleton()
             else if (viewModel.hasReviews)
-              ...viewModel.reviews.map((review) => _buildReviewItem(review))
+              ...viewModel.reviews.map((review) => _ReviewItem(review: review))
             else
-              _buildEmptyReviews(),
+              const _EmptyReviewsWidget(),
           ],
         ),
-      ),
-    );
-  }
-
-  /// Builds a single review item
-  Widget _buildReviewItem(Review review) {
-    final dateFormat = DateFormat('dd MMMM yyyy', 'tr_TR');
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // User name and rating
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  review.userName,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Row(
-                children: List.generate(5, (index) {
-                  return Icon(
-                    index < review.rating.floor()
-                        ? Iconsax.star5
-                        : Iconsax.star,
-                    size: 12,
-                    color: const Color(0xFFFFA500),
-                  );
-                }),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          
-          // Comment text
-          Text(
-            review.comment,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurface.withAlpha(179),
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          // Date
-          Text(
-            dateFormat.format(review.createdAt),
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.outlineVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Builds reviews loading skeleton
-  Widget _buildReviewsLoading() {
-    return Column(
-      children: List.generate(3, (index) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User name skeleton
-              Container(
-                width: 120,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 12),
-              
-              // Comment skeleton
-              Container(
-                width: double.infinity,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              // Date skeleton
-              Container(
-                width: 80,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-
-  /// Builds empty reviews state
-  Widget _buildEmptyReviews() {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      child: const Column(
-        children: [
-          Icon(
-            Iconsax.message_text,
-            size: 48,
-            color: AppColors.outlineVariant,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Henüz değerlendirme yok',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.outlineVariant,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -848,6 +710,167 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Private widgets for better performance and reusability
+
+/// Review item widget - extracted for better performance
+class _ReviewItem extends StatelessWidget {
+  final Review review;
+
+  const _ReviewItem({required this.review});
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd MMMM yyyy', 'tr_TR');
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // User name and rating
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  review.userName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Row(
+                children: List.generate(5, (index) {
+                  return Icon(
+                    index < review.rating.floor()
+                        ? Iconsax.star5
+                        : Iconsax.star,
+                    size: 12,
+                    color: const Color(0xFFFFA500),
+                  );
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          
+          // Comment text
+          Text(
+            review.comment,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.onSurface.withAlpha(179),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Date
+          Text(
+            dateFormat.format(review.createdAt),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.outlineVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reviews loading skeleton widget
+class _ReviewsLoadingSkeleton extends StatelessWidget {
+  const _ReviewsLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(3, (index) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User name skeleton
+              Container(
+                width: 120,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Comment skeleton
+              Container(
+                width: double.infinity,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              // Date skeleton
+              Container(
+                width: 80,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Empty reviews widget
+class _EmptyReviewsWidget extends StatelessWidget {
+  const _EmptyReviewsWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      child: const Column(
+        children: [
+          Icon(
+            Iconsax.message_text,
+            size: 48,
+            color: AppColors.outlineVariant,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Henüz değerlendirme yok',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.outlineVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
