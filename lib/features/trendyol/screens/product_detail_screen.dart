@@ -37,8 +37,6 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductDetailViewModel _viewModel;
   bool _viewModelListenerAttached = false;
-  final PageController _carouselController = PageController();
-  int _currentImageIndex = 0;
 
   @override
   void initState() {
@@ -102,7 +100,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (_viewModelListenerAttached) {
       _viewModel.removeListener(_onViewModelChanged);
     }
-    _carouselController.dispose();
     super.dispose();
   }
 
@@ -142,13 +139,93 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       children: [
         CustomScrollView(
           slivers: [
-            // SliverAppBar with image carousel (Sub-task 11.2)
-            _buildSliverAppBar(product),
+            // Back button AppBar (pinned, no image)
+            SliverAppBar(
+              pinned: true,
+              backgroundColor: AppColors.surfaceContainerLowest,
+              foregroundColor: AppColors.onSurface,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              leading: IconButton(
+                icon: const Icon(Iconsax.arrow_left_2),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Iconsax.share),
+                  onPressed: () {},
+                ),
+              ],
+            ),
+
+            // Hero + CarouselView.weighted (400:600 oran, 1:7:1 ağırlık)
+            SliverToBoxAdapter(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final screenWidth = constraints.maxWidth;
+                  // Ortadaki item genişliği: toplam 9 birim, 7 birim orta
+                  // padding 8px her iki yanda
+                  final mainItemWidth = screenWidth * 7 / 9;
+                  final itemHeight = mainItemWidth * 600 / 400;
+
+                  return SizedBox(
+                    height: itemHeight,
+                    child: CarouselView.weighted(
+                      flexWeights: const [7, 1],
+                      itemSnapping: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      children: product.images.isEmpty
+                          ? [
+                              Container(
+                                color: AppColors.surfaceContainerLow,
+                                child: const Center(
+                                  child: Icon(
+                                    Iconsax.image,
+                                    color: AppColors.outlineVariant,
+                                    size: 48,
+                                  ),
+                                ),
+                              ),
+                            ]
+                          : product.images.asMap().entries.map((entry) {
+                              final url = entry.value;
+                              return ClipRRect(
+                                  child: CachedNetworkImage(
+                                    imageUrl: url,
+                                    // İlk görsel için ProductCard'daki cache key'i kullan
+                                    // → network isteği olmadan cache'den gelir
+                                    cacheKey: entry.key == 0
+                                        ? 'product_${product.id}_thumb'
+                                        : 'product_${product.id}_img_${entry.key}',
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    placeholder: (_, __) => Container(
+                                      color: AppColors.surfaceContainerLow,
+                                    ),
+                                    errorWidget: (_, __, ___) => Container(
+                                      color: AppColors.surfaceContainerLow,
+                                      child: const Center(
+                                        child: Icon(
+                                          Iconsax.image,
+                                          color: AppColors.outlineVariant,
+                                          size: 48,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                            }).toList(),
+                    ),
+                  );
+                },
+              ),
+            ),
             
-            // Product info section (Sub-task 11.3)
+            // Product info section
             _buildProductInfoSection(product),
             
-            // Reviews section (Sub-task 11.5)
+            // Reviews section
             _buildReviewsSection(viewModel),
             
             // Bottom padding for FAB
@@ -158,102 +235,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ],
         ),
         
-        // "Gardıroba Ekle" button (Sub-task 11.4)
+        // "Gardıroba Ekle" button
         _buildSaveButton(viewModel),
       ],
-    );
-  }
-
-  /// Builds SliverAppBar with Hero animation and CarouselView (Sub-task 11.2)
-  Widget _buildSliverAppBar(Product product) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    
-    return SliverAppBar(
-      expandedHeight: screenWidth, // 1:1 aspect ratio
-      pinned: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
-      foregroundColor: AppColors.onSurface,
-      leading: IconButton(
-        icon: const Icon(Iconsax.arrow_left_2),
-        onPressed: () => Navigator.of(context).pop(),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Iconsax.share),
-          onPressed: () {
-            // TODO: Implement share functionality
-          },
-        ),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: Hero(
-          tag: 'product_${product.id}',
-          child: Stack(
-            children: [
-              // CarouselView for images
-              PageView.builder(
-                controller: _carouselController,
-                itemCount: product.images.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentImageIndex = index;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  return CachedNetworkImage(
-                    imageUrl: product.images[index],
-                    cacheKey: 'product_${product.id}_image_$index',
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: AppColors.surfaceContainerLow,
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: AppColors.surfaceContainerLow,
-                      child: const Center(
-                        child: Icon(
-                          Iconsax.image,
-                          color: AppColors.outlineVariant,
-                          size: 48,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              
-              // Image index indicator
-              if (product.images.length > 1)
-                Positioned(
-                  bottom: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withAlpha(153),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_currentImageIndex + 1}/${product.images.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

@@ -21,11 +21,13 @@ class ProductSearchViewModel extends ChangeNotifier {
   bool _freeShippingOnly = false;
   bool _isLoading = false;
   bool _isLoadingMore = false;
+  bool _isPrefetching = false; // Arka plan prefetch — UI'a yansımaz
   String? _errorMessage;
   int _currentPage = 1;
   bool _hasMorePages = true;
   int _totalCount = 0;
   List<String> _searchHistory = [];
+  static const int _pageSize = 24;
   
   // Debounce timer
   Timer? _debounceTimer;
@@ -33,7 +35,8 @@ class ProductSearchViewModel extends ChangeNotifier {
   // Constants
   static const int _maxSearchHistoryItems = 10;
   static const String _searchHistoryKey = 'trendyol_search_history';
-  static const Duration _debounceDuration = Duration(milliseconds: 500);
+  static const Duration _debounceDuration = Duration(milliseconds: 800);
+  static const int _minQueryLength = 3;
 
   ProductSearchViewModel({
     required TrendyolService trendyolService,
@@ -69,9 +72,9 @@ class ProductSearchViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     
-    // Debounce: 500ms bekle, sonra ara
     _debounceTimer?.cancel();
-    if (query.trim().isNotEmpty) {
+    // En az 3 karakter girilmeden arama başlatma
+    if (query.trim().length >= _minQueryLength) {
       _debounceTimer = Timer(_debounceDuration, () {
         searchProducts();
       });
@@ -108,7 +111,7 @@ class ProductSearchViewModel extends ChangeNotifier {
 
       _products = response.products;
       _totalCount = response.totalCount;
-      _hasMorePages = response.products.length >= 24; // Trendyol sayfa başına ~24 ürün
+      _hasMorePages = response.products.length >= _pageSize;
       
       // Arama geçmişine ekle
       await _saveSearchQuery(_searchQuery);
@@ -127,11 +130,17 @@ class ProductSearchViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+
+    // Sayfa 1 yüklendikten sonra sayfa 2'yi arka planda prefetch et
+    if (_hasMorePages && _currentPage == 1) {
+      _prefetchNextPage();
+    }
   }
 
-  /// Daha fazla ürün yükle (pagination)
+  /// Kullanıcı scroll ederken çağrılır — prefetch edilmiş veriyi ekle
+  /// Loading göstermez, seamless deneyim
   Future<void> loadMoreProducts() async {
-    if (_isLoadingMore || !_hasMorePages || _searchQuery.trim().isEmpty) {
+    if (_isLoadingMore || _isPrefetching || !_hasMorePages || _searchQuery.trim().isEmpty) {
       return;
     }
 
@@ -153,18 +162,44 @@ class ProductSearchViewModel extends ChangeNotifier {
       } else {
         _products.addAll(response.products);
         _currentPage++;
-        _hasMorePages = response.products.length >= 24;
+        _hasMorePages = response.products.length >= _pageSize;
       }
     } on TrendyolException catch (e) {
       _errorMessage = e.message;
     } catch (e) {
-      _errorMessage = 'Daha fazla ürün yüklenemedi';
       if (kDebugMode) {
         print('Load more error: $e');
       }
     } finally {
       _isLoadingMore = false;
       notifyListeners();
+    }
+
+    // Bir sonraki sayfayı arka planda prefetch et
+    if (_hasMorePages) {
+      _prefetchNextPage();
+    }
+  }
+
+  /// Bir sonraki sayfayı sessizce arka planda yükle — UI'a yansımaz
+  Future<void> _prefetchNextPage() async {
+    if (_isPrefetching || !_hasMorePages) return;
+    _isPrefetching = true;
+
+    try {
+      await _trendyolService.searchProducts(
+        query: _searchQuery,
+        sort: _sortOption,
+        minPrice: _minPrice,
+        maxPrice: _maxPrice,
+        freeShipping: _freeShippingOnly,
+        page: _currentPage + 1,
+      );
+      // Sonuç cache'e alındı, loadMoreProducts çağrıldığında anında gelir
+    } catch (_) {
+      // Prefetch hatası sessizce yutulur
+    } finally {
+      _isPrefetching = false;
     }
   }
 
@@ -259,6 +294,13 @@ class ProductSearchViewModel extends ChangeNotifier {
       }
       return null;
     }
+  }
+
+  /// Debounce'u iptal edip hemen arama yap (enter tuşu için)
+  void cancelDebounceAndSearch() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    searchProducts();
   }
 
   /// Arama geçmişinden arama yap

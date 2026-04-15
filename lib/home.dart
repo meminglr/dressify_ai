@@ -113,7 +113,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             HomeScreen(controller: controller),
             ChangeNotifierProvider.value(
               value: productSearchViewModel, // Mevcut instance'ı kullan
-              child: const ProductSearchScreen(),
+              child: ProductSearchScreen(scrollController: controller),
             ),
             _buildPlaceholderContent('Gardırop'),
             ChangeNotifierProvider.value(

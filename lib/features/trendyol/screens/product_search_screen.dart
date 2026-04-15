@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/product_search_view_model.dart';
@@ -21,36 +22,52 @@ import '../../../core/theme/app_colors.dart';
 /// 
 /// Validates Requirements: 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 17, 18
 class ProductSearchScreen extends StatefulWidget {
-  const ProductSearchScreen({super.key});
+  final ScrollController? scrollController;
+  
+  const ProductSearchScreen({super.key, this.scrollController});
 
   @override
   State<ProductSearchScreen> createState() => _ProductSearchScreenState();
 }
 
-class _ProductSearchScreenState extends State<ProductSearchScreen> {
-  final ScrollController _scrollController = ScrollController();
+class _ProductSearchScreenState extends State<ProductSearchScreen>
+    with SingleTickerProviderStateMixin {
+  late ScrollController _scrollController;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  bool _showSearchHistory = false;
+  late AnimationController _historyAnimController;
+  late Animation<double> _historyFadeAnim;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = widget.scrollController ?? ScrollController();
     _scrollController.addListener(_onScroll);
     _searchFocusNode.addListener(_onSearchFocusChanged);
+    _historyAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _historyFadeAnim = CurvedAnimation(
+      parent: _historyAnimController,
+      curve: Curves.easeOut,
+    );
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    if (widget.scrollController == null) {
+      _scrollController.dispose();
+    }
     _searchController.dispose();
     _minPriceController.dispose();
     _maxPriceController.dispose();
     _searchFocusNode.removeListener(_onSearchFocusChanged);
     _searchFocusNode.dispose();
+    _historyAnimController.dispose();
     super.dispose();
   }
 
@@ -63,9 +80,11 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
   }
 
   void _onSearchFocusChanged() {
-    setState(() {
-      _showSearchHistory = _searchFocusNode.hasFocus;
-    });
+    if (_searchFocusNode.hasFocus) {
+      _historyAnimController.forward();
+    } else {
+      _historyAnimController.reverse();
+    }
   }
 
   @override
@@ -77,15 +96,12 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
           return CustomScrollView(
             controller: _scrollController,
             slivers: [
-              // Sub-task 9.2: SliverAppBar ve arama çubuğu
-              _buildSliverAppBar(viewModel),
+              // Arama + Buton barı (tek SliverAppBar)
+              _buildSearchBar(viewModel),
               
-              // Sub-task 9.7: Arama geçmişi dropdown
-              if (_showSearchHistory && viewModel.searchHistory.isNotEmpty)
+              // Sub-task 9.7: Arama geçmişi dropdown (animasyonlu)
+              if (viewModel.searchHistory.isNotEmpty)
                 _buildSearchHistorySliver(viewModel),
-              
-              // Sub-task 9.3: Filtre ve sıralama UI
-              _buildFiltersSliver(viewModel),
               
               // Sub-task 9.4 & 9.5: Ürün grid'i veya state'ler
               _buildContentSliver(viewModel),
@@ -93,71 +109,174 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
           );
         },
       ),
-      // Sub-task 9.6: "Link ile Ekle" butonu
-      floatingActionButton: _buildLinkFAB(),
     );
   }
 
-  /// Sub-task 9.2: SliverAppBar ve arama çubuğunu implement et
-  Widget _buildSliverAppBar(ProductSearchViewModel viewModel) {
+  /// Arama çubuğu SliverAppBar
+  Widget _buildSearchBar(ProductSearchViewModel viewModel) {
+    final hasActiveFilters = viewModel.minPrice != null ||
+        viewModel.maxPrice != null ||
+        viewModel.freeShippingOnly ||
+        viewModel.sortOption != SortOption.bestSeller;
+
     return SliverAppBar(
       floating: true,
       snap: true,
       pinned: false,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: AppColors.background,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
-      expandedHeight: 80,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 48, 16, 8),
-          child: TextField(
-            controller: _searchController,
-            focusNode: _searchFocusNode,
-            decoration: InputDecoration(
-              hintText: 'Ürün ara...',
-              hintStyle: TextStyle(
-                color: AppColors.outlineVariant,
-                fontSize: 15,
-              ),
-              prefixIcon: const Icon(
+      toolbarHeight: 68,
+      automaticallyImplyLeading: false,
+      titleSpacing: 16,
+      title: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: TextField(
+          controller: _searchController,
+          focusNode: _searchFocusNode,
+          style: const TextStyle(
+            color: AppColors.onSurface,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Trendyol\'da ürün ara...',
+            hintStyle: const TextStyle(
+              color: AppColors.outlineVariant,
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+            ),
+            prefixIcon: const Padding(
+              padding: EdgeInsets.all(12),
+              child: Icon(
                 Iconsax.search_normal_1,
                 color: AppColors.primary,
-                size: 20,
-              ),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(
-                        Icons.clear,
-                        color: AppColors.outlineVariant,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        _searchController.clear();
-                        viewModel.updateSearchQuery('');
-                      },
-                    )
-                  : null,
-              filled: true,
-              fillColor: AppColors.surfaceContainerLow,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
+                size: 22,
               ),
             ),
-            onChanged: (value) {
-              setState(() {}); // Update suffix icon
-              viewModel.updateSearchQuery(value);
-            },
-            onSubmitted: (value) {
-              if (value.trim().isNotEmpty) {
-                viewModel.searchProducts();
-                _searchFocusNode.unfocus();
-              }
-            },
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfaceContainerLow,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: AppColors.outlineVariant,
+                        size: 16,
+                      ),
+                    ),
+                    onPressed: () {
+                      _searchController.clear();
+                      viewModel.updateSearchQuery('');
+                      setState(() {});
+                    },
+                  )
+                : null,
+            filled: false,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+          ),
+          onChanged: (value) {
+            setState(() {});
+            viewModel.updateSearchQuery(value);
+          },
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              viewModel.cancelDebounceAndSearch();
+              _searchFocusNode.unfocus();
+            }
+          },
+        ),
+      ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(48),
+        child: Container(
+          color: AppColors.background,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () => _showFilterBottomSheet(context, viewModel),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(20),
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Iconsax.filter, color: AppColors.primary, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        hasActiveFilters ? 'Filtreler' : 'Filtrele',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      if (hasActiveFilters) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _getActiveFilterCount(viewModel).toString(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _showLinkBottomSheet(context, viewModel),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(20),
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Iconsax.link, color: AppColors.primary, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Link ile Ekle',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -167,37 +286,165 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
   /// Sub-task 9.7: Arama geçmişi dropdown'unu ekle
   Widget _buildSearchHistorySliver(ProductSearchViewModel viewModel) {
     return SliverToBoxAdapter(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.onSurface.withAlpha(10),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+      child: FadeTransition(
+        opacity: _historyFadeAnim,
+        child: SizeTransition(
+          sizeFactor: _historyFadeAnim,
+          axisAlignment: -1,
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.onSurface.withAlpha(8),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Son Aramalar',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => viewModel.clearSearchHistory(),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Temizle',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...viewModel.searchHistory.map((query) {
+                  return InkWell(
+                    onTap: () {
+                      _searchController.text = query;
+                      viewModel.searchFromHistory(query);
+                      _searchFocusNode.unfocus();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Iconsax.clock,
+                            size: 16,
+                            color: AppColors.outlineVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              query,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.onSurface,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Iconsax.arrow_up_3,
+                            size: 16,
+                            color: AppColors.outlineVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  int _getActiveFilterCount(ProductSearchViewModel viewModel) {
+    int count = 0;
+    if (viewModel.minPrice != null) count++;
+    if (viewModel.maxPrice != null) count++;
+    if (viewModel.freeShippingOnly) count++;
+    if (viewModel.sortOption != SortOption.bestSeller) count++;
+    return count;
+  }
+
+  void _showFilterBottomSheet(BuildContext context, ProductSearchViewModel viewModel) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          12,
+          24,
+          MediaQuery.of(context).viewInsets.bottom + 32,
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Son Aramalar',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.onSurface,
-                    ),
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Title
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Filtreler',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
                   ),
+                ),
+                if (_getActiveFilterCount(viewModel) > 0)
                   TextButton(
-                    onPressed: () => viewModel.clearSearchHistory(),
+                    onPressed: () {
+                      _minPriceController.clear();
+                      _maxPriceController.clear();
+                      viewModel.clearFilters();
+                      Navigator.pop(context);
+                    },
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(0, 0),
@@ -206,113 +453,73 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                     child: const Text(
                       'Temizle',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 14,
                         color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            ...viewModel.searchHistory.map((query) {
-              return InkWell(
-                onTap: () {
-                  _searchController.text = query;
-                  viewModel.searchFromHistory(query);
-                  _searchFocusNode.unfocus();
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Iconsax.clock,
-                        size: 16,
-                        color: AppColors.outlineVariant,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          query,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: AppColors.onSurface,
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Iconsax.arrow_up_3,
-                        size: 16,
-                        color: AppColors.outlineVariant,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Sub-task 9.3: Filtre ve sıralama UI'ını implement et
-  Widget _buildFiltersSliver(ProductSearchViewModel viewModel) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Sıralama dropdown
-            Row(
-              children: [
-                const Icon(
-                  Iconsax.sort,
-                  size: 18,
-                  color: AppColors.onSurface,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<SortOption>(
-                    value: viewModel.sortOption,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: AppColors.surfaceContainerLow,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                    items: SortOption.values.map((option) {
-                      return DropdownMenuItem(
-                        value: option,
-                        child: Text(
-                          option.label,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        viewModel.updateSortOption(value);
-                      }
-                    },
-                  ),
-                ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
             
-            // Fiyat filtreleri
+            // Sıralama
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text(
+                'Sıralama',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<SortOption>(
+              value: viewModel.sortOption,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.surfaceContainerLow,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+              items: SortOption.values.map((option) {
+                return DropdownMenuItem(
+                  value: option,
+                  child: Text(
+                    option.label,
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  viewModel.updateSortOption(value);
+                }
+              },
+            ),
+            const SizedBox(height: 24),
+            
+            // Fiyat aralığı
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text(
+                'Fiyat Aralığı',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -320,9 +527,9 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                     controller: _minPriceController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      hintText: 'Min Fiyat',
-                      hintStyle: TextStyle(
-                        fontSize: 13,
+                      hintText: 'Min',
+                      hintStyle: const TextStyle(
+                        fontSize: 14,
                         color: AppColors.outlineVariant,
                       ),
                       filled: true,
@@ -332,8 +539,8 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                         borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
+                        horizontal: 16,
+                        vertical: 14,
                       ),
                     ),
                     onChanged: (value) {
@@ -342,15 +549,25 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    '-',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.outlineVariant,
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _maxPriceController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      hintText: 'Max Fiyat',
-                      hintStyle: TextStyle(
-                        fontSize: 13,
+                      hintText: 'Max',
+                      hintStyle: const TextStyle(
+                        fontSize: 14,
                         color: AppColors.outlineVariant,
                       ),
                       filled: true,
@@ -360,8 +577,8 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                         borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
+                        horizontal: 16,
+                        vertical: 14,
                       ),
                     ),
                     onChanged: (value) {
@@ -372,46 +589,80 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
             
-            // Ücretsiz kargo checkbox
-            Row(
-              children: [
-                Checkbox(
-                  value: viewModel.freeShippingOnly,
-                  onChanged: (value) {
-                    viewModel.updateFilters(freeShipping: value ?? false);
-                  },
-                  activeColor: AppColors.primary,
-                ),
-                const Text(
-                  'Ücretsiz Kargo',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.onSurface,
+            // Ücretsiz kargo
+            GestureDetector(
+              onTap: () {
+                viewModel.updateFilters(freeShipping: !viewModel.freeShippingOnly);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: viewModel.freeShippingOnly
+                      ? AppColors.primary.withOpacity(0.1)
+                      : AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: viewModel.freeShippingOnly
+                        ? AppColors.primary
+                        : Colors.transparent,
+                    width: 1.5,
                   ),
                 ),
-                const Spacer(),
-                
-                // Filtreleri temizle butonu
-                if (viewModel.minPrice != null ||
-                    viewModel.maxPrice != null ||
-                    viewModel.freeShippingOnly)
-                  TextButton(
-                    onPressed: () {
-                      _minPriceController.clear();
-                      _maxPriceController.clear();
-                      viewModel.clearFilters();
-                    },
-                    child: const Text(
-                      'Temizle',
+                child: Row(
+                  children: [
+                    Icon(
+                      viewModel.freeShippingOnly
+                          ? Iconsax.tick_circle5
+                          : Iconsax.tick_circle,
+                      color: viewModel.freeShippingOnly
+                          ? AppColors.primary
+                          : AppColors.outlineVariant,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Ücretsiz Kargo',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.primary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Uygula butonu
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  if (viewModel.searchQuery.isNotEmpty) {
+                    viewModel.searchProducts();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-              ],
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Uygula',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -452,31 +703,32 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          childAspectRatio: 0.65,
+          // Görsel 400:600 oranında + alt bilgi alanı (~110px)
+          // Ekran genişliği - padding (32) - spacing (12) / 2 = kart genişliği
+          mainAxisExtent: ((MediaQuery.of(context).size.width - 44) / 2) * (600 / 400) + 110,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
-            // Show loading indicator at the end if loading more
+            // Prefetch bitmemişse son item'da loading göster
             if (index == viewModel.products.length) {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(16.0),
                   child: CircularProgressIndicator(
                     color: AppColors.primary,
+                    strokeWidth: 2,
                   ),
                 ),
               );
             }
-
             final product = viewModel.products[index];
             return ProductCard(
               product: product,
               onTap: () {
-                // Navigate to ProductDetailScreen with product object
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => ChangeNotifierProvider(
@@ -491,8 +743,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
               },
             );
           },
-          childCount: viewModel.products.length +
-              (viewModel.isLoadingMore ? 1 : 0),
+          childCount: viewModel.products.length + (viewModel.isLoadingMore ? 1 : 0),
         ),
       ),
     );
@@ -620,39 +871,191 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
     );
   }
 
-  /// Sub-task 9.6: "Link ile Ekle" butonu
-  Widget _buildLinkFAB() {
-    return FloatingActionButton.extended(
-      onPressed: () async {
-        final viewModel = context.read<ProductSearchViewModel>();
-        final productId = await viewModel.parseProductLinkFromClipboard();
-        
-        if (productId != null && mounted) {
-          // Navigate to ProductDetailScreen with productId
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ChangeNotifierProvider(
-                create: (_) => ProductDetailViewModel(
-                  trendyolService: viewModel.trendyolService,
-                  savedProductService: viewModel.savedProductService,
+  /// Sub-task 9.6: Link ile Ekle bottom sheet
+  void _showLinkBottomSheet(BuildContext context, ProductSearchViewModel viewModel) {
+    final linkController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            12,
+            24,
+            MediaQuery.of(context).viewInsets.bottom + 32,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                child: ProductDetailScreen(productId: productId),
               ),
-            ),
-          );
-        } else if (viewModel.errorMessage != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(viewModel.errorMessage!),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      },
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
-      icon: const Icon(Iconsax.link),
-      label: const Text('Link ile Ekle'),
+              const SizedBox(height: 20),
+              const Text(
+                'Link ile Ürün Ekle',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Trendyol ürün linkini yapıştırın',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.outlineVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // URL input
+              TextField(
+                controller: linkController,
+                autofocus: true,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.onSurface,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'https://www.trendyol.com/...',
+                  hintStyle: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.outlineVariant,
+                  ),
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Icon(
+                      Iconsax.link,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: linkController,
+                    builder: (_, val, __) => val.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              color: AppColors.outlineVariant,
+                              size: 18,
+                            ),
+                            onPressed: () => linkController.clear(),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  filled: true,
+                  fillColor: AppColors.surfaceContainerLow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Yapıştır butonu (küçük, pill)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: GestureDetector(
+                  onTap: () async {
+                    final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    if (data?.text != null) {
+                      linkController.text = data!.text!;
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withAlpha(20),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Iconsax.copy, color: AppColors.primary, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          'Panodan Yapıştır',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Ürünü Getir butonu
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final url = linkController.text.trim();
+                    if (url.isEmpty) return;
+                    Navigator.pop(context);
+                    final productId = viewModel.trendyolService.extractProductIdFromUrl(url);
+                    if (productId != null && mounted) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ChangeNotifierProvider(
+                            create: (_) => ProductDetailViewModel(
+                              trendyolService: viewModel.trendyolService,
+                              savedProductService: viewModel.savedProductService,
+                            ),
+                            child: ProductDetailScreen(productId: productId),
+                          ),
+                        ),
+                      );
+                    } else if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Geçersiz Trendyol linki'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Ürünü Getir',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
