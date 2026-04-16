@@ -14,11 +14,16 @@ class MediaCarouselView extends StatefulWidget {
   final int initialIndex;
   final String heroTag;
 
+  /// Trendyol ürününe tıklanınca çağrılır (productId ile)
+  /// true dönerse CarouselView de kapanır (ürün gardıroptan çıkarıldı)
+  final Future<bool> Function(String productId)? onTrendyolTap;
+
   const MediaCarouselView({
     super.key,
     required this.mediaList,
     required this.initialIndex,
     required this.heroTag,
+    this.onTrendyolTap,
   });
 
   @override
@@ -43,12 +48,18 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
     super.dispose();
   }
 
+  bool _isTrendyolItem(int index) {
+    final media = widget.mediaList[index];
+    return media.type == MediaType.trendyolProduct && media.tag != null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final appBarHeight = AppBar().preferredSize.height + MediaQuery.of(context).padding.top;
-    final availableHeight = screenHeight - appBarHeight;
-    
+    final topPadding = MediaQuery.of(context).padding.top;
+    const kToolbarHeight = 56.0; // standard AppBar height
+    final availableHeight = screenHeight - kToolbarHeight - topPadding;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -75,20 +86,63 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
               )
             : null,
         centerTitle: true,
+        // Trendyol ürünü gösteriliyorsa AppBar'da "Ürünü Gör" butonu
+        actions: [
+          ValueListenableBuilder<int>(
+            valueListenable: _currentIndexNotifier,
+            builder: (context, currentIndex, child) {
+              if (!_isTrendyolItem(currentIndex)) return const SizedBox.shrink();
+              final productId = widget.mediaList[currentIndex].tag!;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: TextButton.icon(
+                  onPressed: () async {
+                    if (widget.onTrendyolTap != null) {
+                      final removed = await widget.onTrendyolTap!(productId);
+                      if (removed && context.mounted) {
+                        Navigator.of(context).pop(true);
+                      }
+                    }
+                  },
+                  icon: const Icon(
+                    Icons.open_in_new_rounded,
+                    size: 16,
+                    color: Color(0xFFF27A1A),
+                  ),
+                  label: const Text(
+                    'Ürünü Gör',
+                    style: TextStyle(
+                      color: Color(0xFFF27A1A),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: const Color(0xFFF27A1A).withAlpha(20),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
-          if (notification is ScrollEndNotification) {
-            // Calculate current page when scroll ends
-            final screenHeight = MediaQuery.of(context).size.height;
-            final appBarHeight = AppBar().preferredSize.height + MediaQuery.of(context).padding.top;
-            final availableHeight = screenHeight - appBarHeight;
-            final itemHeight = availableHeight - 80;
-            
-            final scrollPosition = notification.metrics.pixels;
-            final newIndex = (scrollPosition / itemHeight).round();
-            
-            if (newIndex != _currentIndexNotifier.value && newIndex >= 0 && newIndex < widget.mediaList.length) {
+          if (notification is ScrollUpdateNotification) {
+            final sh = MediaQuery.of(context).size.height;
+            final tp = MediaQuery.of(context).padding.top;
+            const th = 56.0;
+            final itemHeight = sh - th - tp - 80;
+            if (itemHeight <= 0) return false;
+            // Kaydırma ortasını geçince index güncelle (0.5 threshold)
+            final newIndex = ((notification.metrics.pixels + itemHeight * 0.5) / itemHeight)
+                .floor()
+                .clamp(0, widget.mediaList.length - 1);
+            if (newIndex != _currentIndexNotifier.value) {
               _currentIndexNotifier.value = newIndex;
             }
           }
@@ -124,10 +178,9 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      fadeInDuration: Duration.zero, // No fade-in animation
-      fadeOutDuration: Duration.zero, // No fade-out animation
-      placeholderFadeInDuration: Duration.zero, // No placeholder fade
-      // Remove placeholder completely for instant display
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholderFadeInDuration: Duration.zero,
       errorWidget: (context, url, error) => Container(
         color: const Color(0xFFEEEEEE),
         child: const Center(
@@ -144,31 +197,20 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
           ),
         ),
       ),
-      memCacheHeight: 1200, // Optimize for carousel full-screen size
+      memCacheHeight: 1200,
       maxHeightDiskCache: 1200,
     );
 
     if (isHeroItem) {
       return Hero(
         tag: widget.heroTag,
-        // Disable default Hero overlay/scrim
-        createRectTween: (begin, end) {
-          return RectTween(begin: begin, end: end);
-        },
-        // Use Material to ensure smooth transition
+        createRectTween: (begin, end) => RectTween(begin: begin, end: end),
         child: Material(
           color: Colors.transparent,
           type: MaterialType.transparency,
           child: image,
         ),
-        flightShuttleBuilder: (
-          BuildContext flightContext,
-          Animation<double> animation,
-          HeroFlightDirection flightDirection,
-          BuildContext fromHeroContext,
-          BuildContext toHeroContext,
-        ) {
-          // Use the cached image during flight for smooth animation
+        flightShuttleBuilder: (_, __, ___, ____, _____) {
           return Material(
             color: Colors.transparent,
             type: MaterialType.transparency,

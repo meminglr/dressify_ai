@@ -20,13 +20,16 @@ import '../../../core/theme/app_colors.dart';
 class ProductDetailScreen extends StatefulWidget {
   final Product? product;
   final String? productId;
+  /// Gardıroptan açıldıysa true - çıkarılınca pop(true) döner
+  final bool fromWardrobe;
 
   const ProductDetailScreen({
     super.key,
     this.product,
     this.productId,
-  }) : assert(product != null || productId != null, 
-         'Either product or productId must be provided');
+    this.fromWardrobe = false,
+  }) : assert(product != null || productId != null,
+           'Either product or productId must be provided');
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
@@ -48,8 +51,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       if (widget.product != null) {
         _viewModel.setProduct(widget.product!);
       } else if (widget.productId != null) {
-        // Fallback: Load product from API
-        _viewModel.loadProductDetail(widget.productId!);
+        // Gardıroptan açılıyorsa önce saved_products'tan yükle, API'ye gitme
+        _viewModel.loadFromSavedProduct(widget.productId!);
       }
       
       // Listen to ViewModel changes
@@ -63,19 +66,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void _onViewModelChanged() {
     if (!mounted) return;
 
-    // Show success SnackBar
+    // Gardıroptan açıldıysa ve ürün çıkarıldıysa geri dön
+    if (widget.fromWardrobe && _viewModel.wasRemovedFromWardrobe) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+
+    // Başarı snackbar'ı kaldırıldı - buton durumu zaten gösteriyor
     if (_viewModel.successMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_viewModel.successMessage!),
-          backgroundColor: AppColors.primary,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
       _viewModel.clearSuccess();
     }
 
-    // Show error SnackBar
+    // Sadece hata durumunda snackbar göster
     if (_viewModel.errorMessage != null && _viewModel.product != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -431,59 +433,62 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  /// Builds "Gardıroba Ekle" button (Sub-task 11.4)
+  /// Builds "Gardıroba Ekle" / "Gardıroptan Çıkar" button
   Widget _buildSaveButton(ProductDetailViewModel viewModel) {
+    final isSaved = viewModel.isProductSaved;
+    final isSaving = viewModel.isSaving;
+
     return Positioned(
       left: 20,
       right: 20,
       bottom: 20,
       child: SafeArea(
         child: ElevatedButton(
-          onPressed: viewModel.isSaving
+          onPressed: isSaving
               ? null
               : () {
-                  if (viewModel.isProductSaved) {
+                  if (isSaved) {
                     viewModel.removeFromWardrobe();
                   } else {
                     viewModel.saveToWardrobe();
                   }
                 },
           style: ElevatedButton.styleFrom(
-            backgroundColor: viewModel.isProductSaved
-                ? AppColors.secondaryContainer
+            backgroundColor: isSaved
+                ? AppColors.background
                 : AppColors.primary,
-            foregroundColor: viewModel.isProductSaved
-                ? AppColors.secondary
+            foregroundColor: isSaved
+                ? AppColors.primary
                 : Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(50),
+              side: isSaved
+                  ? const BorderSide(color: AppColors.primary, width: 1.5)
+                  : BorderSide.none,
             ),
-            elevation: 4,
+            elevation: isSaved ? 0 : 4,
+            shadowColor: AppColors.primary.withAlpha(60),
           ),
-          child: viewModel.isSaving
-              ? const SizedBox(
+          child: isSaving
+              ? SizedBox(
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: isSaved ? AppColors.primary : Colors.white,
                   ),
                 )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      viewModel.isProductSaved
-                          ? Iconsax.tick_circle5
-                          : Iconsax.bag_2,
+                      isSaved ? Iconsax.minus_cirlce : Iconsax.bag_2,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      viewModel.isProductSaved
-                          ? 'Gardıroptan Çıkar'
-                          : 'Gardıroba Ekle',
+                      isSaved ? 'Gardıroptan Çıkar' : 'Gardıroba Ekle',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,

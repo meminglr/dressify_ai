@@ -518,18 +518,20 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Builds TabBar as SliverPersistentHeader (Sub-task 11.3)
   Widget _buildTabBarHeader(ProfileViewModel viewModel) {
-    final stats = viewModel.stats;
     return SliverPersistentHeader(
       pinned: true,
       delegate: _TabBarDelegate(
         selectedIndex: _tabController.index,
+        aiLooksCount: viewModel.aiLooksCount,
+        wardrobeCount: viewModel.wardrobeCount,
+        modelsCount: viewModel.modelsCount,
         tabBar: ProfileTabBar(
           controller: _tabController,
           selectedIndex: _tabController.index,
           onTabSelected: (index) {},
-          aiLooksCount: stats?.aiLooksCount ?? 0,
-          uploadsCount: stats?.uploadsCount ?? 0,
-          modelsCount: stats?.modelsCount ?? 0,
+          aiLooksCount: viewModel.aiLooksCount,
+          uploadsCount: viewModel.wardrobeCount,
+          modelsCount: viewModel.modelsCount,
         ),
       ),
     );
@@ -544,33 +546,36 @@ class _ProfileScreenState extends State<ProfileScreen>
   ) {
     final media = mediaList[index];
 
-    // If it's a Trendyol product, navigate to ProductDetailScreen
-    if (media.type == MediaType.trendyolProduct) {
-      // Extract product ID from media tag (stored as product ID)
-      final productId = media.tag;
-      if (productId != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ChangeNotifierProvider(
-              create: (_) => ProductDetailViewModel(
-                trendyolService: TrendyolService(),
-                savedProductService: SavedProductService(),
-              ),
-              child: ProductDetailScreen(productId: productId),
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Otherwise, open carousel view
+    // Tüm tipler (Trendyol dahil) carousel'da açılır
+    // Trendyol ürünü ise carousel içinde "Ürünü Gör" butonu gösterilir
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MediaCarouselView(
           mediaList: mediaList,
           initialIndex: index,
           heroTag: 'media_${media.id}',
+          onTrendyolTap: (productId) async {
+            final removed = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => ChangeNotifierProvider(
+                  create: (_) => ProductDetailViewModel(
+                    trendyolService: TrendyolService(),
+                    savedProductService: SavedProductService(),
+                  ),
+                  child: ProductDetailScreen(
+                    productId: productId,
+                    fromWardrobe: true,
+                  ),
+                ),
+              ),
+            );
+            if (removed == true && context.mounted) {
+              context
+                  .read<ProfileViewModel>()
+                  .removeTrendyolProductFromList(productId);
+            }
+            return removed == true;
+          },
         ),
       ),
     );
@@ -777,17 +782,23 @@ class _ProfileScreenState extends State<ProfileScreen>
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   final ProfileTabBar tabBar;
   final int selectedIndex;
+  final int aiLooksCount;
+  final int wardrobeCount;
+  final int modelsCount;
 
   _TabBarDelegate({
     required this.tabBar,
     required this.selectedIndex,
+    required this.aiLooksCount,
+    required this.wardrobeCount,
+    required this.modelsCount,
   });
 
   @override
-  double get minExtent => 68.0; // Increased for new design
+  double get minExtent => 68.0;
 
   @override
-  double get maxExtent => 68.0; // Increased for new design
+  double get maxExtent => 68.0;
 
   @override
   Widget build(
@@ -800,8 +811,10 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _TabBarDelegate oldDelegate) {
-    // Only rebuild if selected index actually changed
-    return selectedIndex != oldDelegate.selectedIndex;
+    return selectedIndex != oldDelegate.selectedIndex ||
+        aiLooksCount != oldDelegate.aiLooksCount ||
+        wardrobeCount != oldDelegate.wardrobeCount ||
+        modelsCount != oldDelegate.modelsCount;
   }
 }
 

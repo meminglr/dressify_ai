@@ -30,7 +30,7 @@ class SavedProductService {
         );
       }
 
-      // saved_products tablosuna kaydet
+      // saved_products tablosuna kaydet (tüm detaylarla birlikte)
       final savedProductData = {
         'user_id': userId,
         'product_id': product.id,
@@ -38,6 +38,16 @@ class SavedProductService {
         'product_image': product.images.isNotEmpty ? product.images.first : '',
         'product_price': product.price,
         'product_url': product.url,
+        // Detay alanları - API'ye gitmeden detay sayfasını açmak için
+        'product_brand': product.brand,
+        'product_description': product.description,
+        'product_images': product.images,
+        'product_original_price': product.originalPrice,
+        'product_discount_pct': product.discountPct,
+        'product_rating': product.rating,
+        'product_review_count': product.reviewCount,
+        'product_seller': product.seller,
+        'product_free_shipping': product.freeShipping,
       };
 
       final savedProductResponse = await _client
@@ -118,6 +128,36 @@ class SavedProductService {
       if (e is SavedProductException) rethrow;
       throw SavedProductException(
         message: 'Ürün silinemedi',
+        type: SavedProductExceptionType.unknown,
+        originalError: e,
+      );
+    }
+  }
+
+  /// Ürün ID'sine göre kaydedilen ürünü getir
+  ///
+  /// [userId] - Kullanıcı ID'si
+  /// [productId] - Trendyol ürün ID'si
+  ///
+  /// Returns: SavedProduct veya null
+  Future<SavedProduct?> getSavedProductByProductId(
+      String userId, String productId) async {
+    try {
+      final response = await _client
+          .from('saved_products')
+          .select()
+          .eq('user_id', userId)
+          .eq('product_id', productId)
+          .maybeSingle();
+
+      if (response == null) return null;
+      return SavedProduct.fromJson(response);
+    } on PostgrestException catch (e) {
+      throw _handlePostgrestError(e);
+    } catch (e) {
+      if (e is SavedProductException) rethrow;
+      throw SavedProductException(
+        message: 'Ürün bilgisi getirilemedi',
         type: SavedProductExceptionType.unknown,
         originalError: e,
       );

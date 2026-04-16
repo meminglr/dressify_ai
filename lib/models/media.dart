@@ -1,6 +1,6 @@
 /// MediaType enum representing different types of media content.
 ///
-/// Maps to the database CHECK constraint: type IN ('AI_CREATION', 'MODEL', 'UPLOAD')
+/// Maps to the database CHECK constraint: type IN ('AI_CREATION', 'MODEL', 'UPLOAD', 'TRENDYOL_PRODUCT')
 /// Validates Requirements 11.2, 12.4
 enum MediaType {
   /// AI-generated content/looks
@@ -10,7 +10,10 @@ enum MediaType {
   model('MODEL'),
   
   /// User uploaded content
-  upload('UPLOAD');
+  upload('UPLOAD'),
+
+  /// Trendyol product saved to wardrobe
+  trendyolProduct('TRENDYOL_PRODUCT');
 
   /// Database value for this media type
   final String value;
@@ -19,11 +22,11 @@ enum MediaType {
 
   /// Creates MediaType from database string value
   ///
-  /// Throws ArgumentError if value is not recognized
+  /// Returns [upload] as fallback if value is not recognized
   static MediaType fromString(String value) {
     return MediaType.values.firstWhere(
       (e) => e.value == value,
-      orElse: () => throw ArgumentError('Invalid MediaType: $value'),
+      orElse: () => MediaType.upload,
     );
   }
 }

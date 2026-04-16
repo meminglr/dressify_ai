@@ -20,6 +20,9 @@ class ProductDetailViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? _successMessage;
 
+  bool _wasRemovedFromWardrobe = false;
+  bool get wasRemovedFromWardrobe => _wasRemovedFromWardrobe;
+
   ProductDetailViewModel({
     required TrendyolService trendyolService,
     required SavedProductService savedProductService,
@@ -49,6 +52,46 @@ class ProductDetailViewModel extends ChangeNotifier {
     _checkIfProductSaved();
     
     notifyListeners();
+  }
+
+  /// Kaydedilen üründen ürünü yükle (API isteği yapmadan)
+  /// Gardırop ekranından açılırken kullanılır
+  Future<void> loadFromSavedProduct(String productId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      _errorMessage = 'Kullanıcı oturumu bulunamadı';
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final saved = await _savedProductService.getSavedProductByProductId(
+          userId, productId);
+
+      if (saved != null) {
+        _product = saved.toProduct();
+        _isProductSaved = true;
+        _errorMessage = null;
+      } else {
+        // saved_products'ta yoksa API'ye düş
+        await loadProductDetail(productId);
+        return;
+      }
+    } on SavedProductException catch (e) {
+      _errorMessage = e.message;
+      _product = null;
+    } catch (e) {
+      _errorMessage = 'Ürün bilgisi yüklenemedi';
+      _product = null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   /// Ürün detayını yükle
@@ -183,6 +226,7 @@ class ProductDetailViewModel extends ChangeNotifier {
       );
 
       _isProductSaved = false;
+      _wasRemovedFromWardrobe = true;
       _successMessage = 'Ürün gardıroptan çıkarıldı';
       _errorMessage = null;
     } on SavedProductException catch (e) {

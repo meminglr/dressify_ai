@@ -55,6 +55,17 @@ class ProfileViewModel extends ChangeNotifier {
   String? get successMessage => _successMessage;
   int get selectedTabIndex => _selectedTabIndex;
 
+  // Sayılar mediaList'ten anlık hesaplanır — DB'ye gidilmez, her zaman güncel
+  int get aiLooksCount =>
+      _mediaList.where((m) => m.type == ui.MediaType.aiLook).length;
+  int get wardrobeCount => _mediaList
+      .where((m) =>
+          m.type == ui.MediaType.upload ||
+          m.type == ui.MediaType.trendyolProduct)
+      .length;
+  int get modelsCount =>
+      _mediaList.where((m) => m.type == ui.MediaType.model).length;
+
   Future<void> loadProfile(String? userId) async {
     _isError = false;
     _errorMessage = null;
@@ -123,6 +134,16 @@ class ProfileViewModel extends ChangeNotifier {
       _successMessage = null;
       notifyListeners();
     }
+  }
+
+  /// Trendyol ürününü mediaList'ten kaldır (detay sayfasından geri dönünce çağrılır)
+  void removeTrendyolProductFromList(String productId) {
+    final before = _mediaList.length;
+    _mediaList = _mediaList
+        .where((m) =>
+            !(m.type == ui.MediaType.trendyolProduct && m.tag == productId))
+        .toList();
+    if (_mediaList.length != before) notifyListeners();
   }
 
   Future<void> uploadGardiropPhoto(BuildContext context) async {
@@ -399,20 +420,21 @@ class ProfileViewModel extends ChangeNotifier {
     );
   }
 
-  ui.Media _mapMedia(dynamic serviceMedia) {
+  ui.Media _mapMedia(lib_media.Media serviceMedia) {
     ui.MediaType uiType;
-    switch (serviceMedia.type.value) {
-      case 'AI_CREATION':
+    switch (serviceMedia.type) {
+      case lib_media.MediaType.aiCreation:
         uiType = ui.MediaType.aiLook;
         break;
-      case 'MODEL':
+      case lib_media.MediaType.model:
         uiType = ui.MediaType.model;
         break;
-      case 'TRENDYOL_PRODUCT':
+      case lib_media.MediaType.trendyolProduct:
         uiType = ui.MediaType.trendyolProduct;
         break;
-      default:
+      case lib_media.MediaType.upload:
         uiType = ui.MediaType.upload;
+        break;
     }
     return ui.Media(
       id: serviceMedia.id,
