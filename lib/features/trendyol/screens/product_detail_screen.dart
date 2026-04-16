@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:intl/intl.dart';
 import '../viewmodels/product_detail_view_model.dart';
 import '../models/models.dart';
 import '../../../core/theme/app_colors.dart';
@@ -14,7 +13,6 @@ import '../../../core/theme/app_colors.dart';
 /// - Hero animation from ProductCard
 /// - CarouselView for product images
 /// - Product information display
-/// - Reviews list
 /// - "Gardıroba Ekle" button
 /// - Loading and error states
 /// 
@@ -46,13 +44,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       if (!mounted) return;
       _viewModel = context.read<ProductDetailViewModel>();
       
-      // If product is provided, set it directly and only load reviews
+      // If product is provided, set it directly
       if (widget.product != null) {
         _viewModel.setProduct(widget.product!);
-        _viewModel.loadReviews(widget.product!.id);
       } else if (widget.productId != null) {
-        // Fallback: Load product with reviews from API
-        _viewModel.loadProductWithReviews(widget.productId!);
+        // Fallback: Load product from API
+        _viewModel.loadProductDetail(widget.productId!);
       }
       
       // Listen to ViewModel changes
@@ -229,9 +226,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             // Product info section
             _buildProductInfoSection(product),
             
-            // Reviews section
-            _buildReviewsSection(viewModel),
-            
             // Bottom padding for FAB
             const SliverToBoxAdapter(
               child: SizedBox(height: 100),
@@ -398,49 +392,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ),
               ),
             ],
-            
-            // Seller info
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Iconsax.shop,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Satıcı',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.outlineVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          product.seller,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: AppColors.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -476,52 +427,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// Builds reviews section (Sub-task 11.5)
-  Widget _buildReviewsSection(ProductDetailViewModel viewModel) {
-    return SliverToBoxAdapter(
-      child: Container(
-        color: AppColors.surfaceContainerLowest,
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Reviews header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Değerlendirmeler',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: AppColors.onSurface,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (viewModel.hasReviews)
-                  Text(
-                    '${viewModel.reviews.length} yorum',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.outlineVariant,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Reviews list or loading/empty state
-            if (viewModel.isLoadingReviews)
-              const _ReviewsLoadingSkeleton()
-            else if (viewModel.hasReviews)
-              ...viewModel.reviews.map((review) => _ReviewItem(review: review))
-            else
-              const _EmptyReviewsWidget(),
-          ],
-        ),
       ),
     );
   }
@@ -696,7 +601,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               onPressed: () {
                 viewModel.clearError();
                 final id = widget.product?.id ?? widget.productId!;
-                viewModel.loadProductWithReviews(id);
+                viewModel.loadProductDetail(id);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -710,167 +615,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// Private widgets for better performance and reusability
-
-/// Review item widget - extracted for better performance
-class _ReviewItem extends StatelessWidget {
-  final Review review;
-
-  const _ReviewItem({required this.review});
-
-  @override
-  Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd MMMM yyyy', 'tr_TR');
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // User name and rating
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  review.userName,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Row(
-                children: List.generate(5, (index) {
-                  return Icon(
-                    index < review.rating.floor()
-                        ? Iconsax.star5
-                        : Iconsax.star,
-                    size: 12,
-                    color: const Color(0xFFFFA500),
-                  );
-                }),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          
-          // Comment text
-          Text(
-            review.comment,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurface.withAlpha(179),
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          // Date
-          Text(
-            dateFormat.format(review.createdAt),
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.outlineVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Reviews loading skeleton widget
-class _ReviewsLoadingSkeleton extends StatelessWidget {
-  const _ReviewsLoadingSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(3, (index) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User name skeleton
-              Container(
-                width: 120,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 12),
-              
-              // Comment skeleton
-              Container(
-                width: double.infinity,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              // Date skeleton
-              Container(
-                width: 80,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-}
-
-/// Empty reviews widget
-class _EmptyReviewsWidget extends StatelessWidget {
-  const _EmptyReviewsWidget();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      child: const Column(
-        children: [
-          Icon(
-            Iconsax.message_text,
-            size: 48,
-            color: AppColors.outlineVariant,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Henüz değerlendirme yok',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.outlineVariant,
-            ),
-          ),
-        ],
       ),
     );
   }
