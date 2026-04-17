@@ -43,14 +43,16 @@ class ProductDetailViewModel extends ChangeNotifier {
 
   /// Ürünü direkt set et (API isteği yapmadan)
   /// Arama sonuçlarından gelen ürün bilgilerini kullanmak için
-  void setProduct(Product product) {
+  Future<void> setProduct(Product product) async {
     _product = product;
-    _isLoading = false;
+    _isLoading = true;
     _errorMessage = null;
-    
-    // Ürünün kaydedilip kaydedilmediğini kontrol et
-    _checkIfProductSaved();
-    
+    notifyListeners();
+
+    // DB'den kayıt durumunu kontrol et, sonra UI'ı güncelle
+    await _checkIfProductSaved();
+
+    _isLoading = false;
     notifyListeners();
   }
 

@@ -436,66 +436,94 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// Builds "Gardıroba Ekle" / "Gardıroptan Çıkar" button
   Widget _buildSaveButton(ProductDetailViewModel viewModel) {
     final isSaved = viewModel.isProductSaved;
-    final isSaving = viewModel.isSaving;
+    // isLoading: kayıt durumu DB'den kontrol edilirken buton disabled
+    final isBusy = viewModel.isSaving || viewModel.isLoading;
+
+    final color = isSaved ? const Color(0xFFE53935) : AppColors.primary;
 
     return Positioned(
-      left: 20,
-      right: 20,
+      left: 0,
+      right: 0,
       bottom: 20,
       child: SafeArea(
-        child: ElevatedButton(
-          onPressed: isSaving
-              ? null
-              : () {
-                  if (isSaved) {
-                    viewModel.removeFromWardrobe();
-                  } else {
-                    viewModel.saveToWardrobe();
-                  }
-                },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isSaved
-                ? AppColors.background
-                : AppColors.primary,
-            foregroundColor: isSaved
-                ? AppColors.primary
-                : Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
+        child: Align(
+          alignment: Alignment.center,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            decoration: BoxDecoration(
+              color: isBusy ? color.withAlpha(160) : color,
               borderRadius: BorderRadius.circular(50),
-              side: isSaved
-                  ? const BorderSide(color: AppColors.primary, width: 1.5)
-                  : BorderSide.none,
-            ),
-            elevation: isSaved ? 0 : 4,
-            shadowColor: AppColors.primary.withAlpha(60),
-          ),
-          child: isSaving
-              ? SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: isSaved ? AppColors.primary : Colors.white,
-                  ),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      isSaved ? Iconsax.minus_cirlce : Iconsax.bag_2,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isSaved ? 'Gardıroptan Çıkar' : 'Gardıroba Ekle',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+              boxShadow: [
+                BoxShadow(
+                  color: color.withAlpha(60),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(50),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(50),
+                onTap: isBusy
+                    ? null
+                    : () {
+                        if (isSaved) {
+                          viewModel.removeFromWardrobe();
+                        } else {
+                          viewModel.saveToWardrobe();
+                        }
+                      },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 14),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: animation, child: child),
+                    ),
+                    child: isBusy
+                        ? const SizedBox(
+                            key: ValueKey('loading'),
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Row(
+                            key: ValueKey(isSaved),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isSaved
+                                    ? Iconsax.minus_cirlce
+                                    : Iconsax.bag_2,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isSaved
+                                    ? 'Gardıroptan Çıkar'
+                                    : 'Gardıroba Ekle',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

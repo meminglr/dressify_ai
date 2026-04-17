@@ -13,15 +13,13 @@ class ProductSearchViewModel extends ChangeNotifier {
   final SavedProductService _savedProductService;
   
   // State properties
-  List<Product> _products = [];
+  List<Product> _allProducts = [];
   String _searchQuery = '';
   SortOption _sortOption = SortOption.bestSeller;
-  double? _minPrice;
-  double? _maxPrice;
   bool _freeShippingOnly = false;
   bool _isLoading = false;
   bool _isLoadingMore = false;
-  bool _isPrefetching = false; // Arka plan prefetch — UI'a yansımaz
+  bool _isPrefetching = false;
   String? _errorMessage;
   int _currentPage = 1;
   bool _hasMorePages = true;
@@ -47,11 +45,9 @@ class ProductSearchViewModel extends ChangeNotifier {
   }
 
   // Getters
-  List<Product> get products => List.unmodifiable(_products);
+  List<Product> get products => List.unmodifiable(_allProducts);
   String get searchQuery => _searchQuery;
   SortOption get sortOption => _sortOption;
-  double? get minPrice => _minPrice;
-  double? get maxPrice => _maxPrice;
   bool get freeShippingOnly => _freeShippingOnly;
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
@@ -59,7 +55,7 @@ class ProductSearchViewModel extends ChangeNotifier {
   bool get hasMorePages => _hasMorePages;
   int get totalCount => _totalCount;
   List<String> get searchHistory => List.unmodifiable(_searchHistory);
-  bool get hasProducts => _products.isNotEmpty;
+  bool get hasProducts => _allProducts.isNotEmpty;
   bool get hasSearched => _searchQuery.isNotEmpty;
   
   // Service getters for navigation
@@ -91,7 +87,7 @@ class ProductSearchViewModel extends ChangeNotifier {
 
     if (resetPage) {
       _currentPage = 1;
-      _products = [];
+      _allProducts = [];
       _hasMorePages = true;
     }
 
@@ -103,13 +99,12 @@ class ProductSearchViewModel extends ChangeNotifier {
       final response = await _trendyolService.searchProducts(
         query: _searchQuery,
         sort: _sortOption,
-        minPrice: _minPrice,
-        maxPrice: _maxPrice,
+        // Fiyat filtresi local — API'ye gönderilmiyor
         freeShipping: _freeShippingOnly,
         page: _currentPage,
       );
 
-      _products = response.products;
+      _allProducts = response.products;
       _totalCount = response.totalCount;
       _hasMorePages = response.products.length >= _pageSize;
       
@@ -119,10 +114,10 @@ class ProductSearchViewModel extends ChangeNotifier {
       _errorMessage = null;
     } on TrendyolException catch (e) {
       _errorMessage = e.message;
-      _products = [];
+      _allProducts = [];
     } catch (e) {
       _errorMessage = 'Bir hata oluştu, lütfen tekrar deneyin';
-      _products = [];
+      _allProducts = [];
       if (kDebugMode) {
         print('Search error: $e');
       }
@@ -151,8 +146,6 @@ class ProductSearchViewModel extends ChangeNotifier {
       final response = await _trendyolService.searchProducts(
         query: _searchQuery,
         sort: _sortOption,
-        minPrice: _minPrice,
-        maxPrice: _maxPrice,
         freeShipping: _freeShippingOnly,
         page: _currentPage + 1,
       );
@@ -160,7 +153,7 @@ class ProductSearchViewModel extends ChangeNotifier {
       if (response.products.isEmpty) {
         _hasMorePages = false;
       } else {
-        _products.addAll(response.products);
+        _allProducts.addAll(response.products);
         _currentPage++;
         _hasMorePages = response.products.length >= _pageSize;
       }
@@ -190,8 +183,6 @@ class ProductSearchViewModel extends ChangeNotifier {
       await _trendyolService.searchProducts(
         query: _searchQuery,
         sort: _sortOption,
-        minPrice: _minPrice,
-        maxPrice: _maxPrice,
         freeShipping: _freeShippingOnly,
         page: _currentPage + 1,
       );
@@ -203,31 +194,15 @@ class ProductSearchViewModel extends ChangeNotifier {
     }
   }
 
-  /// Filtreleri güncelle ve yeni arama yap
-  void updateFilters({
-    double? minPrice,
-    double? maxPrice,
-    bool? freeShipping,
-  }) {
-    bool hasChanged = false;
-
-    if (minPrice != _minPrice) {
-      _minPrice = minPrice;
-      hasChanged = true;
-    }
-    if (maxPrice != _maxPrice) {
-      _maxPrice = maxPrice;
-      hasChanged = true;
-    }
+  /// Filtreleri güncelle
+  void updateFilters({bool? freeShipping}) {
     if (freeShipping != null && freeShipping != _freeShippingOnly) {
       _freeShippingOnly = freeShipping;
-      hasChanged = true;
-    }
-
-    if (hasChanged && _searchQuery.isNotEmpty) {
-      searchProducts(resetPage: true);
-    } else {
-      notifyListeners();
+      if (_searchQuery.isNotEmpty) {
+        searchProducts(resetPage: true);
+      } else {
+        notifyListeners();
+      }
     }
   }
 
@@ -245,11 +220,10 @@ class ProductSearchViewModel extends ChangeNotifier {
 
   /// Filtreleri temizle
   void clearFilters() {
-    _minPrice = null;
-    _maxPrice = null;
+    final hadFreeShipping = _freeShippingOnly;
     _freeShippingOnly = false;
-    
-    if (_searchQuery.isNotEmpty) {
+
+    if (hadFreeShipping && _searchQuery.isNotEmpty) {
       searchProducts(resetPage: true);
     } else {
       notifyListeners();

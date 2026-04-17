@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import '../viewmodels/product_search_view_model.dart';
 import '../viewmodels/product_detail_view_model.dart';
 import '../models/models.dart';
@@ -34,8 +35,6 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
     with SingleTickerProviderStateMixin {
   late ScrollController _scrollController;
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _minPriceController = TextEditingController();
-  final TextEditingController _maxPriceController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   late AnimationController _historyAnimController;
   late Animation<double> _historyFadeAnim;
@@ -63,8 +62,6 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
       _scrollController.dispose();
     }
     _searchController.dispose();
-    _minPriceController.dispose();
-    _maxPriceController.dispose();
     _searchFocusNode.removeListener(_onSearchFocusChanged);
     _searchFocusNode.dispose();
     _historyAnimController.dispose();
@@ -114,9 +111,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
 
   /// Arama çubuğu SliverAppBar
   Widget _buildSearchBar(ProductSearchViewModel viewModel) {
-    final hasActiveFilters = viewModel.minPrice != null ||
-        viewModel.maxPrice != null ||
-        viewModel.freeShippingOnly ||
+    final hasActiveFilters = viewModel.freeShippingOnly ||
         viewModel.sortOption != SortOption.bestSeller;
 
     return SliverAppBar(
@@ -389,23 +384,20 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
 
   int _getActiveFilterCount(ProductSearchViewModel viewModel) {
     int count = 0;
-    if (viewModel.minPrice != null) count++;
-    if (viewModel.maxPrice != null) count++;
     if (viewModel.freeShippingOnly) count++;
     if (viewModel.sortOption != SortOption.bestSeller) count++;
     return count;
   }
 
   void _showFilterBottomSheet(BuildContext context, ProductSearchViewModel viewModel) {
-    // Local state for immediate UI feedback
     bool localFreeShipping = viewModel.freeShippingOnly;
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
-        builder: (_, setSheetState) => Container(
+        builder: (ctx, setSheetState) => Container(
           decoration: const BoxDecoration(
             color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -414,237 +406,173 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             24,
             12,
             24,
-            MediaQuery.of(context).viewInsets.bottom + 32,
+            MediaQuery.of(ctx).viewInsets.bottom + 32,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Title
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Filtreler',
+              const SizedBox(height: 20),
+
+              // Title + Temizle
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Filtreler',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  if (_getActiveFilterCount(viewModel) > 0)
+                    TextButton(
+                      onPressed: () {
+                        setSheetState(() => localFreeShipping = false);
+                        viewModel.clearFilters();
+                        Navigator.pop(sheetContext);
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        'Temizle',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Sıralama
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Sıralama',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: AppColors.onSurface,
                   ),
                 ),
-                if (_getActiveFilterCount(viewModel) > 0)
-                  TextButton(
-                    onPressed: () {
-                      _minPriceController.clear();
-                      _maxPriceController.clear();
-                      setSheetState(() {
-                        localFreeShipping = false;
-                      });
-                      viewModel.clearFilters();
-                      Navigator.pop(sheetContext);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              const SizedBox(height: 12),
+              PullDownButton(
+                routeTheme: const PullDownMenuRouteTheme(
+                  backgroundColor: AppColors.surfaceContainerLowest,
+                ),
+                itemBuilder: (context) => SortOption.values.map((option) {
+                  return PullDownMenuItem.selectable(
+                    onTap: () => viewModel.updateSortOption(option),
+                    selected: viewModel.sortOption == option,
+                    title: option.label,
+                    itemTheme: PullDownMenuItemTheme(
+                      checkmark: viewModel.sortOption == option
+                          ? Icons.check_rounded
+                          : null,
                     ),
-                    child: const Text(
-                      'Temizle',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  );
+                }).toList(),
+                buttonBuilder: (context, showMenu) => GestureDetector(
+                  onTap: showMenu,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          viewModel.sortOption.label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: AppColors.outlineVariant,
+                          size: 20,
+                        ),
+                      ],
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            
-            // Sıralama
-            Align(
-              alignment: Alignment.centerLeft,
-              child: const Text(
-                'Sıralama',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<SortOption>(
-              value: viewModel.sortOption,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: AppColors.surfaceContainerLow,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              items: SortOption.values.map((option) {
-                return DropdownMenuItem(
-                  value: option,
-                  child: Text(
-                    option.label,
-                    style: const TextStyle(fontSize: 15),
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  viewModel.updateSortOption(value);
-                }
-              },
-            ),
-            const SizedBox(height: 24),
-            
-            // Fiyat aralığı
-            Align(
-              alignment: Alignment.centerLeft,
-              child: const Text(
-                'Fiyat Aralığı',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _minPriceController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      hintText: 'Min',
-                      hintStyle: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.outlineVariant,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.surfaceContainerLow,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
-                    onChanged: (value) {
-                      final minPrice = double.tryParse(value);
-                      viewModel.updateFilters(minPrice: minPrice);
-                    },
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    '-',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.outlineVariant,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _maxPriceController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      hintText: 'Max',
-                      hintStyle: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.outlineVariant,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.surfaceContainerLow,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
-                    onChanged: (value) {
-                      final maxPrice = double.tryParse(value);
-                      viewModel.updateFilters(maxPrice: maxPrice);
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            
-            // Ücretsiz kargo
-            GestureDetector(
-              onTap: () {
-                setSheetState(() {
-                  localFreeShipping = !localFreeShipping;
-                });
-                viewModel.updateFilters(freeShipping: localFreeShipping);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: localFreeShipping
-                      ? AppColors.primary.withOpacity(0.1)
-                      : AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: localFreeShipping
-                        ? AppColors.primary
-                        : Colors.transparent,
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      localFreeShipping
-                          ? Iconsax.tick_circle5
-                          : Iconsax.tick_circle,
+              const SizedBox(height: 24),
+
+              // Ücretsiz kargo — kompakt chip
+              Align(
+                alignment: Alignment.centerLeft,
+                child: GestureDetector(
+                  onTap: () {
+                    setSheetState(() {
+                      localFreeShipping = !localFreeShipping;
+                    });
+                    viewModel.updateFilters(freeShipping: localFreeShipping);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
                       color: localFreeShipping
-                          ? AppColors.primary
-                          : AppColors.outlineVariant,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Ücretsiz Kargo',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.onSurface,
+                          ? AppColors.primary.withAlpha(20)
+                          : AppColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(50),
+                      border: Border.all(
+                        color: localFreeShipping
+                            ? AppColors.primary
+                            : Colors.transparent,
+                        width: 1.5,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          localFreeShipping
+                              ? Icons.check_circle_rounded
+                              : Icons.local_shipping_outlined,
+                          color: localFreeShipping
+                              ? AppColors.primary
+                              : AppColors.outlineVariant,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Ücretsiz Kargo',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: localFreeShipping
+                                ? AppColors.primary
+                                : AppColors.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 24),
             
             // Uygula butonu
@@ -902,7 +830,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             24,
             12,
             24,
-            MediaQuery.of(context).viewInsets.bottom + 32,
+            MediaQuery.of(ctx).viewInsets.bottom + 32,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
