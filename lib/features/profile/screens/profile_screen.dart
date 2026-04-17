@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
@@ -243,6 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.aiLook).toList(),
               0,
+              viewModel.aiLooksListenable,
             ),
             _buildTabContent(
               viewModel,
@@ -250,11 +252,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                 m.type == MediaType.upload || m.type == MediaType.trendyolProduct
               ).toList(),
               1,
+              viewModel.wardrobeListenable,
             ),
             _buildTabContent(
               viewModel,
               viewModel.mediaList.where((m) => m.type == MediaType.model).toList(),
               2,
+              viewModel.modelsListenable,
             ),
           ],
         ),
@@ -263,7 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   /// Builds content for each tab
-  Widget _buildTabContent(ProfileViewModel viewModel, List<Media> mediaList, int tabIndex) {
+  Widget _buildTabContent(ProfileViewModel viewModel, List<Media> mediaList, int tabIndex, ValueListenable<List<Media>> mediaListenable) {
     // Show shimmer only during initial load (list is empty AND loading)
     if (viewModel.isMediaLoading && viewModel.mediaList.isEmpty) {
       return const MasonryShimmer();
@@ -290,7 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           sliver: MasonryGridView(
             mediaList: mediaList,
             onItemTap: (index) {
-              _openCarousel(context, viewModel, index, mediaList);
+              _openCarousel(context, viewModel, index, mediaList, mediaListenable);
             },
           ),
         ),
@@ -543,15 +547,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     ProfileViewModel viewModel,
     int index,
     List<Media> mediaList,
+    ValueListenable<List<Media>> mediaListenable,
   ) {
     final media = mediaList[index];
 
-    // Tüm tipler (Trendyol dahil) carousel'da açılır
-    // Trendyol ürünü ise carousel içinde "Ürünü Gör" butonu gösterilir
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MediaCarouselView(
-          mediaList: mediaList,
+          mediaListenable: mediaListenable,
           initialIndex: index,
           heroTag: 'media_${media.id}',
           onTrendyolTap: (productId) async {
@@ -575,6 +578,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                   .removeTrendyolProductFromList(productId);
             }
             return removed == true;
+          },
+          onRemoveTrendyolProduct: (productId) async {
+            if (context.mounted) {
+              context.read<ProfileViewModel>().removeTrendyolProduct(productId);
+            }
+          },
+          onDeleteMedia: (mediaId) async {
+            if (context.mounted) {
+              await context.read<ProfileViewModel>().deleteMedia(mediaId);
+            }
           },
         ),
       ),

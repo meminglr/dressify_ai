@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +12,7 @@ import '../../../models/media.dart' as lib_media;
 import '../../../services/profile_service.dart';
 import '../../../services/media_service.dart';
 import '../../../services/storage_service.dart';
+import '../../../features/trendyol/services/saved_product_service.dart';
 import '../../../exceptions/profile_exception.dart';
 import '../../../exceptions/media_exception.dart';
 import '../../../exceptions/storage_exception.dart' as app_storage;
@@ -47,8 +49,43 @@ class ProfileViewModel extends ChangeNotifier {
   ui.Profile? get profile => _profile;
   ui.UserStats? get stats => _stats;
   List<ui.Media> get mediaList => List.unmodifiable(_mediaList);
-  bool get isProfileLoading => _isProfileLoading;
-  bool get isMediaLoading => _isMediaLoading;
+
+  /// Carousel için reaktif medya listesi
+  ValueListenable<List<ui.Media>> get mediaListenable => _mediaListNotifier;
+  late final _MediaListNotifier<ui.Media> _mediaListNotifier =
+      _MediaListNotifier<ui.Media>(this, () => List.unmodifiable(_mediaList));
+
+  /// Gardırop sekmesi için filtrelenmiş reaktif liste
+  ValueListenable<List<ui.Media>> get wardrobeListenable =>
+      _wardrobeListNotifier;
+  late final _MediaListNotifier<ui.Media> _wardrobeListNotifier =
+      _MediaListNotifier<ui.Media>(
+    this,
+    () => List.unmodifiable(_mediaList.where((m) =>
+        m.type == ui.MediaType.upload ||
+        m.type == ui.MediaType.trendyolProduct)),
+  );
+
+  /// Modellerim sekmesi için filtrelenmiş reaktif liste
+  ValueListenable<List<ui.Media>> get modelsListenable => _modelsListNotifier;
+  late final _MediaListNotifier<ui.Media> _modelsListNotifier =
+      _MediaListNotifier<ui.Media>(
+    this,
+    () => List.unmodifiable(
+        _mediaList.where((m) => m.type == ui.MediaType.model)),
+  );
+
+  /// AI Looks sekmesi için filtrelenmiş reaktif liste
+  ValueListenable<List<ui.Media>> get aiLooksListenable =>
+      _aiLooksListNotifier;
+  late final _MediaListNotifier<ui.Media> _aiLooksListNotifier =
+      _MediaListNotifier<ui.Media>(
+    this,
+    () => List.unmodifiable(
+        _mediaList.where((m) => m.type == ui.MediaType.aiLook)),
+  );
+
+  bool get isProfileLoading => _isProfileLoading;  bool get isMediaLoading => _isMediaLoading;
   bool get isUploading => _isUploading;
   bool get isError => _isError;
   String? get errorMessage => _errorMessage;
@@ -144,6 +181,34 @@ class ProfileViewModel extends ChangeNotifier {
             !(m.type == ui.MediaType.trendyolProduct && m.tag == productId))
         .toList();
     if (_mediaList.length != before) notifyListeners();
+  }
+
+  /// Medyayı sil (upload/model) — carousel menüsünden çağrılır
+  Future<void> deleteMedia(String mediaId) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      await _mediaService.deleteMedia(userId: userId, mediaId: mediaId);
+      _mediaList = _mediaList.where((m) => m.id != mediaId).toList();
+      notifyListeners();
+    } catch (error) {
+      _handleError(error);
+    }
+  }
+
+  /// Trendyol ürününü gardıroptan çıkar — carousel menüsünden çağrılır
+  Future<void> removeTrendyolProduct(String productId) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final savedProductService = SavedProductService();
+      await savedProductService.deleteSavedProductByProductId(userId, productId);
+      // Realtime subscription media tablosundaki silmeyi zaten yakalar,
+      // ama anında UI güncellemesi için local listeden de kaldır
+      removeTrendyolProductFromList(productId);
+    } catch (error) {
+      _handleError(error);
+    }
   }
 
   Future<void> uploadGardiropPhoto(BuildContext context) async {
@@ -491,6 +556,30 @@ class ProfileViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _unsubscribeAll();
+    super.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// _MediaListNotifier — ChangeNotifier'ı ValueListenable<List<T>>'a köprüler
+// ---------------------------------------------------------------------------
+
+class _MediaListNotifier<T> extends ValueNotifier<List<T>> {
+  final ChangeNotifier _source;
+  final List<T> Function() _selector;
+
+  _MediaListNotifier(this._source, this._selector)
+      : super(_selector()) {
+    _source.addListener(_update);
+  }
+
+  void _update() {
+    value = _selector();
+  }
+
+  @override
+  void dispose() {
+    _source.removeListener(_update);
     super.dispose();
   }
 }

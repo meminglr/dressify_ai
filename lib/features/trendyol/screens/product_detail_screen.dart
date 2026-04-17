@@ -150,9 +150,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 onPressed: () => Navigator.of(context).pop(),
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Iconsax.share),
-                  onPressed: () {},
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: TextButton.icon(
+                    onPressed: () => context.read<ProductDetailViewModel>().shareProduct(),
+                    icon: const Icon(
+                      Iconsax.export_3,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                    label: const Text(
+                      'Paylaş',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0x1A742FE5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -436,8 +459,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// Builds "Gardıroba Ekle" / "Gardıroptan Çıkar" button
   Widget _buildSaveButton(ProductDetailViewModel viewModel) {
     final isSaved = viewModel.isProductSaved;
-    // isLoading: kayıt durumu DB'den kontrol edilirken buton disabled
+    // isLoading: kayıt durumu DB'den kontrol edilirken buton disabled ama spinner yok
     final isBusy = viewModel.isSaving || viewModel.isLoading;
+    final showSpinner = viewModel.isSaving;
 
     final color = isSaved ? const Color(0xFFE53935) : AppColors.primary;
 
@@ -485,7 +509,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       opacity: animation,
                       child: ScaleTransition(scale: animation, child: child),
                     ),
-                    child: isBusy
+                    child: showSpinner
                         ? const SizedBox(
                             key: ValueKey('loading'),
                             height: 20,

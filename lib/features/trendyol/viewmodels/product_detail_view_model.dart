@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 import '../services/trendyol_service.dart';
@@ -286,6 +287,22 @@ class ProductDetailViewModel extends ChangeNotifier {
     if (_product != null && loadReviewsFlag) {
       await loadReviews(productId, maxPages: reviewPages);
     }
+  }
+
+  /// Mevcut ürünün linkini paylaş
+  Future<void> shareProduct() async {
+    if (_product == null) return;
+
+    final url = _product!.url.isNotEmpty
+        ? _product!.url
+        : 'https://www.trendyol.com/sr?q=${Uri.encodeComponent(_product!.name)}';
+
+    await SharePlus.instance.share(
+      ShareParams(
+        text: '${_product!.name}\n$url',
+        subject: _product!.name,
+      ),
+    );
   }
 
   /// Hata mesajını temizle
