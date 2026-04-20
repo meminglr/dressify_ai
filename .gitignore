@@ -46,3 +46,6 @@ app.*.map.json
 
 # Secrets
 .env
+
+# n8n workflows
+n8n/
