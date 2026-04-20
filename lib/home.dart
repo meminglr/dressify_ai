@@ -1,6 +1,7 @@
 import 'package:dressifyai/screens/home/home_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_floating_bottom_bar/flutter_floating_bottom_bar.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
@@ -73,7 +74,20 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      // Ana sayfadayken (tab 0) geri tuşu uygulamadan çıksın,
+      // diğer tablardayken tab 0'a dönsün.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (tabController.index != 0) {
+          tabController.animateTo(0);
+        } else {
+          // Ana sayfadayız, uygulamadan çık
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(toolbarHeight: 0 ),
       body: BottomBar(
         fit: StackFit.expand,
@@ -143,6 +157,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             ],
           ),
         ),
+      ),
       ),
     );
   }

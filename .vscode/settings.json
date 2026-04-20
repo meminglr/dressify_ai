@@ -1,3 +1,5 @@
 {
-    "kiroAgent.configureMCP": "Enabled"
+    "kiroAgent.configureMCP": "Enabled",
+    "git.path": "/usr/bin/git",
+    "git.enabled": true
 }
