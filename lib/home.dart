@@ -29,6 +29,7 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   late int currentPage;
   late TabController tabController;
+  final BottomBarController _bottomBarController = BottomBarController();
   late ProfileViewModel profileViewModel; // Singleton ViewModel
   late ProductSearchViewModel productSearchViewModel; // Singleton ViewModel
 
@@ -57,6 +58,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
     tabController.animation!.addListener(() {
       final value = tabController.animation!.value.round();
       if (value != currentPage && mounted) {
+        // Tab değişince navbar'ı göster
+        _bottomBarController.show();
         setState(() {
           currentPage = value;
         });
@@ -67,8 +70,9 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     tabController.dispose();
-    profileViewModel.dispose(); // ViewModel'i dispose et
-    productSearchViewModel.dispose(); // ViewModel'i dispose et
+    _bottomBarController.dispose();
+    profileViewModel.dispose();
+    productSearchViewModel.dispose();
     super.dispose();
   }
 
@@ -90,6 +94,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       child: Scaffold(
       appBar: AppBar(toolbarHeight: 0 ),
       body: BottomBar(
+        controller: _bottomBarController,
         fit: StackFit.expand,
         borderRadius: BorderRadius.circular(40),
         duration: const Duration(milliseconds: 300),
