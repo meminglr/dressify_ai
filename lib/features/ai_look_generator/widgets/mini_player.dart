@@ -1,125 +1,103 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../models/generation_status.dart';
 import '../viewmodels/generation_queue_view_model.dart';
 
-/// Minimized state of the Generation Bottom Sheet.
+/// Mini player — WeSlide'ın panelHeader'ı olarak kullanılır.
 ///
-/// Persists above the navigation bar across all tabs as a global overlay.
-/// Height: 80–90px. Layout:
-///   [Left: status indicator] [Center: status text + secondary] [Right: expand + close]
+/// Yükseklik: 88px. Kullanıcı bu alana dokunarak veya yukarı kaydırarak
+/// full sheet'i açabilir. Aşağı kaydırarak kapatabilir.
 ///
-/// States:
-/// - Processing: purple circular progress + "Look oluşturuluyor..." + queue info
-/// - Success:    green checkmark + "Look hazır! Görüntüle"
-/// - Error:      red error icon + "Hata oluştu. Tekrar dene"
-/// - Idle:       hidden (controlled by GenerationQueueViewModel.isBottomSheetVisible)
-class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({super.key});
+/// Durumlar:
+/// - İşleniyor: mor dönen progress + "Look oluşturuluyor..."
+/// - Tamamlandı: yeşil checkmark + "Look hazır! Görüntüle"
+/// - Hata: kırmızı ikon + "Hata oluştu. Tekrar dene"
+/// - Sırada: gri saat ikonu + "Sırada bekliyor..."
+class MiniPlayerContent extends StatelessWidget {
+  final GenerationQueueViewModel queueVm;
+
+  const MiniPlayerContent({super.key, required this.queueVm});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GenerationQueueViewModel>(
-      builder: (context, vm, _) {
-        if (!vm.isBottomSheetVisible) return const SizedBox.shrink();
+    final active = queueVm.activeGeneration;
+    final status = active?.status ??
+        (queueVm.history.isNotEmpty ? queueVm.history.first.status : null);
+    // Android gesture nav / iOS home indicator için alt padding
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-        final active = vm.activeGeneration;
-        final status = active?.status ??
-            (vm.history.isNotEmpty ? vm.history.first.status : null);
-
-        return GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            vm.expandBottomSheet();
-          },
-          onVerticalDragEnd: (details) {
-            // Swipe down to close
-            if (details.primaryVelocity != null &&
-                details.primaryVelocity! > 300) {
-              _handleClose(context, vm);
-            }
-          },
-          child: Container(
-            height: 88,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.onSurface.withAlpha(20),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  // Left: status indicator
-                  _StatusIndicator(status: status),
-                  const SizedBox(width: 12),
-
-                  // Center: text
-                  Expanded(
-                    child: _StatusText(vm: vm, status: status),
-                  ),
-
-                  // Right: expand + close buttons
-                  _ActionButtons(vm: vm),
-                ],
-              ),
-            ),
-          ),
-        );
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        queueVm.expandBottomSheet();
       },
-    );
-  }
-
-  void _handleClose(BuildContext context, GenerationQueueViewModel vm) {
-    if (vm.isProcessing) {
-      showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Oluşturma devam ediyor'),
-          content: const Text(
-            'Oluşturma işlemi arka planda devam edecek. '
-            'Mini player\'ı kapatmak istiyor musun?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('İptal'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-              child: const Text('Kapat'),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        // 88px içerik + sistem padding
+        height: 88 + bottomPadding,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.onSurface.withAlpha(18),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
             ),
           ],
         ),
-      ).then((confirmed) {
-        if (confirmed == true) vm.hideBottomSheet();
-      });
-    } else {
-      vm.hideBottomSheet();
-    }
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.outlineVariant.withAlpha(120),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // İçerik satırı — sabit 88px alanın içinde
+            SizedBox(
+              height: 62, // 88 - 10(top) - 6(bottom) - 10(drag handle)
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    _MiniStatusIndicator(status: status),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _MiniStatusText(vm: queueVm, status: status),
+                    ),
+                    _MiniActionButtons(vm: queueVm),
+                  ],
+                ),
+              ),
+            ),
+            // Sistem navigation bar için boşluk
+            SizedBox(height: bottomPadding),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-// -----------------------------------------------------------------------------
-// Status Indicator (left side)
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Durum göstergesi (sol)
+// ---------------------------------------------------------------------------
 
-class _StatusIndicator extends StatelessWidget {
+class _MiniStatusIndicator extends StatelessWidget {
   final GenerationStatus? status;
 
-  const _StatusIndicator({required this.status});
+  const _MiniStatusIndicator({required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -127,16 +105,16 @@ class _StatusIndicator extends StatelessWidget {
       width: 40,
       height: 40,
       child: switch (status) {
-        GenerationStatus.processing || null => _ProcessingIndicator(),
-        GenerationStatus.completed => _IconBadge(
+        GenerationStatus.processing || null => const _SpinningProgress(),
+        GenerationStatus.completed => _StatusIconBadge(
             icon: Iconsax.tick_circle5,
-            color: const Color(0xFF10B981), // green
+            color: const Color(0xFF10B981),
           ),
-        GenerationStatus.failed => _IconBadge(
+        GenerationStatus.failed => _StatusIconBadge(
             icon: Iconsax.warning_2,
-            color: const Color(0xFFEF4444), // red
+            color: const Color(0xFFEF4444),
           ),
-        GenerationStatus.queued => _IconBadge(
+        GenerationStatus.queued => _StatusIconBadge(
             icon: Iconsax.clock,
             color: AppColors.outlineVariant,
           ),
@@ -145,7 +123,9 @@ class _StatusIndicator extends StatelessWidget {
   }
 }
 
-class _ProcessingIndicator extends StatelessWidget {
+class _SpinningProgress extends StatelessWidget {
+  const _SpinningProgress();
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -160,11 +140,11 @@ class _ProcessingIndicator extends StatelessWidget {
   }
 }
 
-class _IconBadge extends StatelessWidget {
+class _StatusIconBadge extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _IconBadge({required this.icon, required this.color});
+  const _StatusIconBadge({required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +152,7 @@ class _IconBadge extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
+        color: color.withAlpha(22),
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 20),
@@ -180,15 +160,15 @@ class _IconBadge extends StatelessWidget {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Status Text (center)
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Durum metni (orta)
+// ---------------------------------------------------------------------------
 
-class _StatusText extends StatelessWidget {
+class _MiniStatusText extends StatelessWidget {
   final GenerationQueueViewModel vm;
   final GenerationStatus? status;
 
-  const _StatusText({required this.vm, required this.status});
+  const _MiniStatusText({required this.vm, required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -233,50 +213,47 @@ class _StatusText extends StatelessWidget {
             ? '${vm.history.length + 1}/$total oluşturuluyor'
             : 'Bu işlem 30-90 saniye sürebilir';
         return ('Look oluşturuluyor...', secondary);
-
       case GenerationStatus.completed:
         return ('Look hazır! Görüntüle', null);
-
       case GenerationStatus.failed:
         final msg = vm.history.isNotEmpty
             ? vm.history.first.errorMessage
             : null;
         return ('Hata oluştu. Tekrar dene', msg);
-
       case GenerationStatus.queued:
         return ('Sırada bekliyor...', '${vm.queue.length} işlem sırada');
-
       case null:
         return ('Look oluşturuluyor...', null);
     }
   }
 }
 
-// -----------------------------------------------------------------------------
-// Action Buttons (right side)
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Aksiyon butonları (sağ)
+// ---------------------------------------------------------------------------
 
-class _ActionButtons extends StatelessWidget {
+class _MiniActionButtons extends StatelessWidget {
   final GenerationQueueViewModel vm;
 
-  const _ActionButtons({required this.vm});
+  const _MiniActionButtons({required this.vm});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Expand button
+        // Genişlet butonu
         Semantics(
           label: 'Genişlet',
           button: true,
           child: SizedBox(
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             child: IconButton(
+              padding: EdgeInsets.zero,
               icon: const Icon(
                 Iconsax.arrow_up_2,
-                size: 20,
+                size: 18,
                 color: AppColors.outlineVariant,
               ),
               onPressed: () {
@@ -287,18 +264,18 @@ class _ActionButtons extends StatelessWidget {
             ),
           ),
         ),
-
-        // Close button
+        // Kapat butonu
         Semantics(
           label: 'Kapat',
           button: true,
           child: SizedBox(
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             child: IconButton(
+              padding: EdgeInsets.zero,
               icon: const Icon(
                 Iconsax.close_circle,
-                size: 20,
+                size: 18,
                 color: AppColors.outlineVariant,
               ),
               onPressed: () => _handleClose(context),
@@ -316,7 +293,16 @@ class _ActionButtons extends StatelessWidget {
       showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Oluşturma devam ediyor'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text(
+            'Oluşturma devam ediyor',
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           content: const Text(
             'Oluşturma işlemi arka planda devam edecek. '
             'Mini player\'ı kapatmak istiyor musun?',

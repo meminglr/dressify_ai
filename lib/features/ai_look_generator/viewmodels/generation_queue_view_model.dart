@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
+import 'package:we_slide/we_slide.dart';
 
 import '../models/generation_queue_item.dart';
 import '../models/generation_request.dart';
@@ -39,6 +40,18 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
   final N8nService _n8nService;
   final _uuid = const Uuid();
+
+  // ---------------------------------------------------------------------------
+  // WeSlide Controller — artık ViewModel'de değil, View'da yönetiliyor
+  // ---------------------------------------------------------------------------
+
+  /// WeSlide controller'ını dışarıdan set etmek için kullanılır.
+  /// [_HomeState] tarafından set edilir, ViewModel controller'ı sahiplenmez.
+  WeSlideController? _weSlideController;
+
+  void attachWeSlideController(WeSlideController controller) {
+    _weSlideController = controller;
+  }
 
   // ---------------------------------------------------------------------------
   // State
@@ -178,24 +191,32 @@ class GenerationQueueViewModel extends ChangeNotifier {
     _isBottomSheetVisible = true;
     _isMinimized = false;
     notifyListeners();
+    // WeSlide panel'i göster (mini player seviyesinde açılır)
+    // panelMinSize > 0 olduğu için panel zaten görünür olacak
   }
 
   void hideBottomSheet() {
     if (!_isBottomSheetVisible) return;
     _isBottomSheetVisible = false;
     notifyListeners();
+    // WeSlide panel'i kapat (panelMinSize = 0 yaparak gizlenir)
   }
 
   void minimizeBottomSheet() {
     if (_isMinimized) return;
     _isMinimized = true;
     notifyListeners();
+    // WeSlide'ı mini player seviyesine indir
+    _weSlideController?.hide();
   }
 
   void expandBottomSheet() {
-    if (!_isMinimized) return;
+    if (!_isMinimized && _isBottomSheetVisible) return;
+    _isBottomSheetVisible = true;
     _isMinimized = false;
     notifyListeners();
+    // WeSlide'ı full sheet seviyesine çıkar
+    _weSlideController?.show();
   }
 
   // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ dependencies:
   uuid: ^4.5.1
   pull_down_button: ^0.10.2
   share_plus: ^13.0.0
+  we_slide: ^2.4.0
 
 dev_dependencies:
   flutter_test:
