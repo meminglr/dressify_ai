@@ -2,19 +2,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:shimmer/shimmer.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../profile/models/media.dart';
 import 'empty_state_widget.dart';
 
-/// Horizontal scrollable carousel displaying the user's model photos.
+/// Horizontal scrollable carousel displaying the user's model photos using PageView.
 ///
 /// - Shows shimmer placeholders while [isLoading] is true.
 /// - Shows [EmptyStateWidget] when [models] is empty and not loading.
-/// - Each card is 312×312px with 48px border radius and a gradient overlay.
+/// - Each card is 312×416px with 48px border radius and a gradient overlay.
 /// - Tapping a card calls [onModelSelected] with the model's ID.
-/// - The selected card is highlighted via [SelectionIndicator].
-class ModelCarousel extends StatelessWidget {
+/// - Uses PageView with viewportFraction for smooth scrolling and reliable tap detection.
+class ModelCarousel extends StatefulWidget {
   /// List of model media items to display.
   final List<Media> models;
 
@@ -45,55 +44,71 @@ class ModelCarousel extends StatelessWidget {
   static const double _carouselHeight = _cardHeight;
 
   @override
+  State<ModelCarousel> createState() => _ModelCarouselState();
+}
+
+class _ModelCarouselState extends State<ModelCarousel> {
+  @override
   Widget build(BuildContext context) {
-    if (isLoading) return _buildShimmer();
-    if (models.isEmpty) return _buildEmptyState();
+    // Eğer loading ve liste boşsa shimmer göster
+    if (widget.isLoading && widget.models.isEmpty) return _buildShimmer();
+    // Eğer loading değil ve liste boşsa empty state göster
+    if (widget.models.isEmpty && !widget.isLoading) return _buildEmptyState();
+    // Diğer durumlarda carousel göster (veriler varsa veya yükleniyorsa)
     return _buildCarousel();
   }
 
   Widget _buildCarousel() {
     return SizedBox(
-      height: _carouselHeight,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        itemCount: models.length,
+      height: ModelCarousel._carouselHeight,
+      child: PageView.builder(
+        controller: PageController(
+          viewportFraction: 0.85, // Ana kart %85, yanlar görünür
+          initialPage: 0,
+        ),
+        padEnds: false, // Padding'i manuel kontrol edeceğiz
+        itemCount: widget.models.length,
         itemBuilder: (context, index) {
-          final model = models[index];
-          final isSelected = model.id == selectedModelId;
+          final model = widget.models[index];
+          final isSelected = model.id == widget.selectedModelId;
+          
+          // İlk kart için sol padding ekle (Step header ile aynı hizada)
+          final leftPadding = index == 0 ? 24.0 : 8.0;
+          
           return Padding(
-            padding: EdgeInsets.only(right: index < models.length - 1 ? 16 : 0),
+            padding: EdgeInsets.only(left: leftPadding, right: 8),
             child: _ModelCard(
               model: model,
               isSelected: isSelected,
               index: index,
-              onTap: () => onModelSelected(model.id),
+              onTap: () {
+                debugPrint('ModelCarousel: Toggling model ${model.id}');
+                widget.onModelSelected(model.id);
+              },
             ),
           );
-        },      ),
+        },
+      ),
     );
   }
 
   Widget _buildShimmer() {
     return SizedBox(
-      height: _carouselHeight,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        itemCount: 3,
+      height: ModelCarousel._carouselHeight,
+      child: PageView.builder(
+        controller: PageController(viewportFraction: 0.85),
+        padEnds: false, // Padding'i manuel kontrol edeceğiz
+        itemCount: 3, // 3 shimmer kart göster
         itemBuilder: (context, index) {
+          // İlk kart için sol padding ekle (Step header ile aynı hizada)
+          final leftPadding = index == 0 ? 24.0 : 8.0;
+          
           return Padding(
-            padding: EdgeInsets.only(right: index < 2 ? 16 : 0),
-            child: Shimmer.fromColors(
-              baseColor: AppColors.surfaceContainerLow,
-              highlightColor: AppColors.surfaceContainerLowest,
-              child: Container(
-                width: _cardWidth,
-                height: _cardHeight,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(_cardRadius),
-                ),
+            padding: EdgeInsets.only(left: leftPadding, right: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLow, // Shimmer için daha koyu renk
+                borderRadius: BorderRadius.circular(ModelCarousel._cardRadius),
               ),
             ),
           );
@@ -104,13 +119,13 @@ class ModelCarousel extends StatelessWidget {
 
   Widget _buildEmptyState() {
     return SizedBox(
-      height: _carouselHeight,
+      height: ModelCarousel._carouselHeight,
       child: EmptyStateWidget(
         icon: Iconsax.profile_circle,
         title: 'Model fotoğrafı eklemelisin',
         description: 'AI look oluşturmak için önce bir model fotoğrafı ekle',
         primaryButtonLabel: 'Model Ekle',
-        onPrimaryTap: onAddModelTap,
+        onPrimaryTap: widget.onAddModelTap,
       ),
     );
   }
@@ -137,93 +152,93 @@ class _ModelCard extends StatelessWidget {
       button: true,
       child: GestureDetector(
         onTap: () {
+          debugPrint('_ModelCard: Toggle tap detected for model ${model.id}');
           HapticFeedback.selectionClick();
           onTap();
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: ModelCarousel._cardWidth,
-          height: ModelCarousel._cardHeight,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(ModelCarousel._cardRadius),
-            border: isSelected
-                ? Border.all(color: AppColors.primary, width: 3)
-                : null,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.onSurface.withAlpha(15),
-                blurRadius: 48,
-                offset: const Offset(0, 12),
-              ),
-            ],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(ModelCarousel._cardRadius),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Image
-                CachedNetworkImage(
-                  imageUrl: model.imageUrl,
-                  fit: BoxFit.cover,
-                  memCacheWidth: ModelCarousel._cardWidth.toInt(),
-                  memCacheHeight: ModelCarousel._cardHeight.toInt(),
-                  placeholder: (context, url) => Shimmer.fromColors(
-                    baseColor: AppColors.surfaceContainerLow,
-                    highlightColor: AppColors.surfaceContainerLowest,
-                    child: Container(color: AppColors.surfaceContainerLow),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: AppColors.surfaceContainerLow,
-                    child: const Icon(
-                      Iconsax.image,
-                      color: AppColors.outlineVariant,
-                      size: 40,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutBack,
+              decoration: BoxDecoration(
+                border: isSelected
+                    ? Border.all(color: AppColors.primary, width: 3)
+                    : null,
+                borderRadius: BorderRadius.circular(ModelCarousel._cardRadius),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(ModelCarousel._cardRadius - (isSelected ? 3 : 0)),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Image with zoom animation
+                    AnimatedScale(
+                      scale: isSelected ? 1.08 : 1.0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutBack,
+                      child: CachedNetworkImage(
+                        imageUrl: model.imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholderFadeInDuration: Duration.zero,
+                        // Yüksek çözünürlük için cache boyutlarını arttırdık
+                        memCacheHeight: (ModelCarousel._cardHeight * 2).toInt(), // 2x daha yüksek
+                        maxHeightDiskCache: (ModelCarousel._cardHeight * 2).toInt(), // 2x daha yüksek
+                        memCacheWidth: (ModelCarousel._cardWidth * 2).toInt(), // 2x daha geniş
+                        maxWidthDiskCache: (ModelCarousel._cardWidth * 2).toInt(), // 2x daha geniş
+                        placeholder: (context, url) => Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainerLow, // Görünür shimmer rengi
+                            borderRadius: BorderRadius.circular(ModelCarousel._cardRadius - (isSelected ? 3 : 0)),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: AppColors.surfaceContainerLow, // Görünür error rengi
+                          child: const Icon(
+                            Iconsax.image,
+                            color: AppColors.outlineVariant,
+                            size: 40,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
 
-                // Gradient overlay (bottom half, dark)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: ModelCarousel._cardHeight * 0.5,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          const Color(0xFF2E3335).withAlpha(153), // 60% opacity
-                        ],
+                    // Selection indicator
+                    if (isSelected)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: AnimatedScale(
+                          scale: isSelected ? 1.2 : 1.0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.elasticOut,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Iconsax.tick_circle,
+                              color: AppColors.onPrimary,
+                              size: 16,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                  ],
                 ),
-
-                // Selected checkmark badge (top-right)
-                if (isSelected)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Iconsax.tick_circle,
-                        color: AppColors.onPrimary,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
         ),

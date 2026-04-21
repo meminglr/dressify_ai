@@ -33,6 +33,22 @@ class SelectionScreen extends StatefulWidget {
 
 class _SelectionScreenState extends State<SelectionScreen> {
   @override
+  void initState() {
+    super.initState();
+    
+    // Load profile data if not already loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final profileViewModel = context.read<ProfileViewModel>();
+      
+      // Only load if mediaList is empty (not loaded yet)
+      if (profileViewModel.mediaList.isEmpty && !profileViewModel.isMediaLoading) {
+        profileViewModel.loadProfile(null);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => SelectionViewModel(
@@ -58,10 +74,12 @@ class _SelectionScreenBodyState extends State<_SelectionScreenBody> {
 
   @override
   Widget build(BuildContext context) {
-    final profileViewModel = context.watch<ProfileViewModel>();
+    // Only watch SelectionViewModel for button state
     final selectionViewModel = context.watch<SelectionViewModel>();
+    
+    // Read ProfileViewModel once (don't watch to avoid rebuilds)
+    final profileViewModel = context.read<ProfileViewModel>();
 
-    final wardrobe = profileViewModel.wardrobeListenable.value;
     final screenWidth = MediaQuery.of(context).size.width;
     const horizontalPadding = 24.0 * 2;
     const crossAxisSpacing = 12.0;
@@ -107,24 +125,27 @@ class _SelectionScreenBodyState extends State<_SelectionScreenBody> {
 
           // ── Model carousel ────────────────────────────────────────────
           SliverToBoxAdapter(
-            child: ValueListenableBuilder<List<Media>>(
-              valueListenable: profileViewModel.modelsListenable,
-              builder: (context, models, _) {
-                return RepaintBoundary(
-                  child: ModelCarousel(
-                    models: models,
-                    selectedModelId: selectionViewModel.selectedModelId,
-                    onModelSelected: selectionViewModel.selectModel,
-                    isLoading: profileViewModel.isMediaLoading &&
-                        profileViewModel.mediaList.isEmpty,
-                    onAddModelTap: () => _navigateToProfileModelsTab(context),
-                  ),
-                );
-              },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ValueListenableBuilder<List<Media>>(
+                valueListenable: profileViewModel.modelsListenable,
+                builder: (context, models, _) {
+                  return RepaintBoundary(
+                    child: ModelCarousel(
+                      models: models,
+                      selectedModelId: selectionViewModel.selectedModelId,
+                      onModelSelected: selectionViewModel.toggleModel,
+                      isLoading: profileViewModel.isMediaLoading &&
+                          profileViewModel.mediaList.isEmpty,
+                      onAddModelTap: () => profileViewModel.uploadModelPhoto(context),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
           // ── STEP 2 header — pinned ────────────────────────────────────
           SliverPersistentHeader(
@@ -141,53 +162,57 @@ class _SelectionScreenBodyState extends State<_SelectionScreenBody> {
           ),
 
           // ── Wardrobe grid ─────────────────────────────────────────────
-          if (profileViewModel.isMediaLoading && profileViewModel.mediaList.isEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              sliver: SliverGrid(
-                delegate: SliverChildBuilderDelegate(
-                  (_, __) => _ShimmerCard(),
-                  childCount: 6,
-                ),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: crossAxisSpacing,
-                  mainAxisSpacing: mainAxisSpacing,
-                  childAspectRatio: childAspectRatio,
-                ),
-              ),
-            )
-          else if (wardrobe.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                child: ValueListenableBuilder<List<Media>>(
-                  valueListenable: profileViewModel.wardrobeListenable,
-                  builder: (context, _, __) => WardrobeGrid(
-                    wardrobe: const [],
-                    selectedIds: selectionViewModel.selectedWardrobeIds,
-                    onItemToggled: (_) {},
-                    isLoading: false,
-                    onUploadPhotoTap: () =>
-                        profileViewModel.uploadGardiropPhoto(context),
-                    onBrowseTrendyolTap: () => _navigateToTrendyolTab(context),
-                  ),
-                ),
-              ),
-            )
-          else
-            ValueListenableBuilder<List<Media>>(
-              valueListenable: profileViewModel.wardrobeListenable,
-              builder: (context, wardrobeItems, _) {
+          ValueListenableBuilder<List<Media>>(
+            valueListenable: profileViewModel.wardrobeListenable,
+            builder: (context, wardrobeItems, _) {
+              final isLoading = profileViewModel.isMediaLoading && 
+                                profileViewModel.mediaList.isEmpty;
+              
+              if (isLoading) {
                 return SliverPadding(
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                   sliver: SliverGrid(
                     delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final item = wardrobeItems[index];
-                        final isSelected =
-                            selectionViewModel.selectedWardrobeIds.contains(item.id);
-                        return _WardrobeItemTile(
+                      (_, __) => _ShimmerCard(),
+                      childCount: 6,
+                    ),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: crossAxisSpacing,
+                      mainAxisSpacing: mainAxisSpacing,
+                      childAspectRatio: childAspectRatio,
+                    ),
+                  ),
+                );
+              }
+              
+              if (wardrobeItems.isEmpty) {
+                return SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                    child: WardrobeGrid(
+                      wardrobe: const [],
+                      selectedIds: selectionViewModel.selectedWardrobeIds,
+                      onItemToggled: (_) {},
+                      isLoading: false,
+                      onUploadPhotoTap: () =>
+                          profileViewModel.uploadGardiropPhoto(context),
+                      onBrowseTrendyolTap: () => _navigateToTrendyolTab(context),
+                    ),
+                  ),
+                );
+              }
+              
+              return SliverPadding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                sliver: SliverGrid(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = wardrobeItems[index];
+                      final isSelected =
+                          selectionViewModel.selectedWardrobeIds.contains(item.id);
+                      return RepaintBoundary(
+                        child: _WardrobeItemTile(
                           item: item,
                           isSelected: isSelected,
                           index: index,
@@ -206,39 +231,28 @@ class _SelectionScreenBodyState extends State<_SelectionScreenBody> {
                               );
                             }
                           },
-                        );
-                      },
-                      childCount: wardrobeItems.length,
-                    ),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: crossAxisSpacing,
-                      mainAxisSpacing: mainAxisSpacing,
-                      childAspectRatio: childAspectRatio,
-                    ),
+                        ),
+                      );
+                    },
+                    childCount: wardrobeItems.length,
                   ),
-                );
-              },
-            ),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: crossAxisSpacing,
+                    mainAxisSpacing: mainAxisSpacing,
+                    childAspectRatio: childAspectRatio,
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  void _navigateToProfileModelsTab(BuildContext context) {
-    final tc = _tabController;
-    if (tc != null) {
-      tc.animateTo(3);
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (context.mounted) {
-          context.read<ProfileViewModel>().selectTab(2);
-        }
-      });
-    }
-  }
-
   void _navigateToTrendyolTab(BuildContext context) {
-    _tabController?.animateTo(1);
+    _tabController?.animateTo(1); // Trendyol tab
   }
 
   void _showAddWardrobeOptions(BuildContext context) {
@@ -573,57 +587,72 @@ class _WardrobeItemTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutBack,
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(24),
-          border: isSelected
-              ? Border.all(color: AppColors.primary, width: 2.5)
-              : null,
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Opacity(
-                opacity: isSelected ? 1.0 : 0.6,
-                child: Image.network(
-                  item.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Iconsax.image,
-                    color: AppColors.outlineVariant,
-                    size: 32,
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 12,
-                right: 12,
-                child: isSelected
-                    ? Container(
-                        width: 32,
-                        height: 32,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Iconsax.tick_circle,
-                            color: AppColors.onPrimary, size: 16),
-                      )
-                    : Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(204),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Iconsax.add,
-                            color: AppColors.primary, size: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            border: isSelected
+                ? Border.all(color: AppColors.primary, width: 2.5)
+                : null,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24 - (isSelected ? 2.5 : 0)),
+            child: Container(
+              color: AppColors.surfaceContainerLow,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedScale(
+                    scale: isSelected ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutBack,
+                    child: Image.network(
+                      item.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Iconsax.image,
+                        color: AppColors.outlineVariant,
+                        size: 32,
                       ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: AnimatedScale(
+                      scale: isSelected ? 1.2 : 1.0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.elasticOut,
+                      child: isSelected
+                          ? Container(
+                              width: 32,
+                              height: 32,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Iconsax.tick_circle,
+                                  color: AppColors.onPrimary, size: 16),
+                            )
+                          : Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(204),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Iconsax.add,
+                                  color: AppColors.primary, size: 16),
+                            ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

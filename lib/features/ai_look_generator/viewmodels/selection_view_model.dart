@@ -67,12 +67,25 @@ class SelectionViewModel extends ChangeNotifier {
   // Selection methods
   // ---------------------------------------------------------------------------
 
-  /// Selects the model photo with [modelId].
+  /// Toggles the selection state of the model photo with [modelId].
   ///
-  /// If the same model is already selected, this is a no-op (no rebuild).
-  void selectModel(String modelId) {
-    if (_selectedModelId == modelId) return;
-    _selectedModelId = modelId;
+  /// - If the model is already selected, it is deselected (set to null).
+  /// - If no model is selected or a different model is selected, selects this model.
+  void toggleModel(String modelId) {
+    debugPrint('SelectionViewModel: toggleModel called with modelId: $modelId');
+    debugPrint('SelectionViewModel: current selectedModelId: $_selectedModelId');
+    
+    if (_selectedModelId == modelId) {
+      // Same model selected, deselect it
+      _selectedModelId = null;
+      debugPrint('SelectionViewModel: Model deselected');
+    } else {
+      // Different model or no model selected, select this one
+      _selectedModelId = modelId;
+      debugPrint('SelectionViewModel: Model selected');
+    }
+    
+    debugPrint('SelectionViewModel: New selectedModelId: $_selectedModelId, notifying listeners');
     notifyListeners();
   }
 
