@@ -135,7 +135,10 @@ class ProfileViewModel extends ChangeNotifier {
         notifyListeners();
       }
 
-      await _loadMediaList(resolvedUserId);
+      // Only load media if cache is empty (cache-aware loading)
+      if (_mediaList.isEmpty) {
+        await _loadMediaList(resolvedUserId);
+      }
       _subscribeToProfileChanges(resolvedUserId);
       _subscribeToMediaChanges(resolvedUserId);
     } catch (error) {
@@ -403,10 +406,8 @@ class ProfileViewModel extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _loadMediaList(String userId) async {
-    if (_mediaList.isEmpty) {
-      _isMediaLoading = true;
-      notifyListeners();
-    }
+    _isMediaLoading = true;
+    notifyListeners();
 
     try {
       final serviceMediaList =
@@ -574,7 +575,26 @@ class _MediaListNotifier<T> extends ValueNotifier<List<T>> {
   }
 
   void _update() {
-    value = _selector();
+    final newValue = _selector();
+    // Only update if the filtered list actually changed
+    if (!_listsEqual(value, newValue)) {
+      value = newValue;
+    }
+  }
+
+  bool _listsEqual(List<T> a, List<T> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      // Compare by id if available (Media objects have id)
+      final aItem = a[i];
+      final bItem = b[i];
+      if (aItem is ui.Media && bItem is ui.Media) {
+        if (aItem.id != bItem.id) return false;
+      } else if (aItem != bItem) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @override
