@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:sliding_up_panel/sliding_up_panel.dart';
 import 'package:uuid/uuid.dart';
-import 'package:we_slide/we_slide.dart';
 
 import '../models/generation_queue_item.dart';
 import '../models/generation_request.dart';
@@ -42,15 +42,15 @@ class GenerationQueueViewModel extends ChangeNotifier {
   final _uuid = const Uuid();
 
   // ---------------------------------------------------------------------------
-  // WeSlide Controller — artık ViewModel'de değil, View'da yönetiliyor
+  // PanelController — View tarafından attach edilir, ViewModel sahiplenmez
   // ---------------------------------------------------------------------------
 
-  /// WeSlide controller'ını dışarıdan set etmek için kullanılır.
+  /// SlidingUpPanel controller'ını dışarıdan set etmek için kullanılır.
   /// [_HomeState] tarafından set edilir, ViewModel controller'ı sahiplenmez.
-  WeSlideController? _weSlideController;
+  PanelController? _panelController;
 
-  void attachWeSlideController(WeSlideController controller) {
-    _weSlideController = controller;
+  void attachPanelController(PanelController controller) {
+    _panelController = controller;
   }
 
   // ---------------------------------------------------------------------------
@@ -191,23 +191,22 @@ class GenerationQueueViewModel extends ChangeNotifier {
     _isBottomSheetVisible = true;
     _isMinimized = false;
     notifyListeners();
-    // WeSlide panel'i göster (mini player seviyesinde açılır)
-    // panelMinSize > 0 olduğu için panel zaten görünür olacak
+    // Panel görünür hale gelir (minHeight > 0 olduğu için zaten görünür)
   }
 
   void hideBottomSheet() {
     if (!_isBottomSheetVisible) return;
     _isBottomSheetVisible = false;
     notifyListeners();
-    // WeSlide panel'i kapat (panelMinSize = 0 yaparak gizlenir)
+    // panelMinSize = 0 yapılarak panel gizlenir (Home rebuild ile)
   }
 
   void minimizeBottomSheet() {
     if (_isMinimized) return;
     _isMinimized = true;
     notifyListeners();
-    // WeSlide'ı mini player seviyesine indir
-    _weSlideController?.hide();
+    // Panel'i collapsed (mini player) seviyesine indir
+    _safeClose();
   }
 
   void expandBottomSheet() {
@@ -215,8 +214,43 @@ class GenerationQueueViewModel extends ChangeNotifier {
     _isBottomSheetVisible = true;
     _isMinimized = false;
     notifyListeners();
-    // WeSlide'ı full sheet seviyesine çıkar
-    _weSlideController?.show();
+    // Panel'i tam açık seviyeye çıkar
+    _safeOpen();
+  }
+
+  /// PanelController.close() — sadece attached ve animating değilse çağır.
+  void _safeClose() {
+    final pc = _panelController;
+    if (pc == null || !pc.isAttached) return;
+    if (pc.isPanelAnimating) return;
+    if (pc.isPanelClosed) return;
+    pc.close();
+  }
+
+  /// PanelController.open() — sadece attached ve animating değilse çağır.
+  void _safeOpen() {
+    final pc = _panelController;
+    if (pc == null || !pc.isAttached) return;
+    if (pc.isPanelAnimating) return;
+    if (pc.isPanelOpen) return;
+    pc.open();
+  }
+
+  /// Panel fiziksel olarak collapsed seviyesine indi (View callback'inden çağrılır).
+  /// Controller çağırmaz — sadece state'i senkronize eder.
+  void onPanelCollapsed() {
+    if (_isMinimized) return;
+    _isMinimized = true;
+    notifyListeners();
+  }
+
+  /// Panel fiziksel olarak tam açıldı (View callback'inden çağrılır).
+  /// Controller çağırmaz — sadece state'i senkronize eder.
+  void onPanelExpanded() {
+    if (!_isMinimized && _isBottomSheetVisible) return;
+    _isBottomSheetVisible = true;
+    _isMinimized = false;
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -249,7 +283,11 @@ class GenerationQueueViewModel extends ChangeNotifier {
     // Auto-minimize after 4 seconds so the user can continue browsing
     Future.delayed(const Duration(seconds: 4), () {
       if (_isBottomSheetVisible && !_isMinimized) {
-        minimizeBottomSheet();
+        // State'i güncelle
+        _isMinimized = true;
+        notifyListeners();
+        // Panel attached ve hazırsa kapat
+        _safeClose();
       }
     });
 

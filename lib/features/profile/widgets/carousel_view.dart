@@ -313,19 +313,6 @@ class _MediaCarouselViewState extends State<MediaCarouselView> {
           type: MaterialType.transparency,
           child: image,
         ),
-        flightShuttleBuilder: (context, animation, direction, from, to) {
-          return Material(
-            color: Colors.transparent,
-            type: MaterialType.transparency,
-            child: CachedNetworkImage(
-              imageUrl: media.imageUrl,
-              fit: BoxFit.cover,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              memCacheHeight: 1200,
-            ),
-          );
-        },
       );
     }
     return image;

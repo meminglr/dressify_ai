@@ -20,6 +20,7 @@ class HomeScreen extends StatelessWidget {
         'User';
 
     return Scaffold(
+      appBar: AppBar(toolbarHeight: 0,),
       body: CustomScrollView(
         controller: controller,
         slivers: [

@@ -10,17 +10,22 @@ import '../models/generation_status.dart';
 import '../viewmodels/generation_queue_view_model.dart';
 import 'empty_state_widget.dart';
 
-/// WeSlide'ın `panel` içeriği — mini player header + full sheet tek widget'ta.
+/// SlidingUpPanel'ın `panelBuilder` içeriği — mini player header + full sheet tek widget'ta.
 ///
-/// WeSlide'ın panelHeader/panel ayrımı yerine her şeyi tek Column'da tutuyoruz:
 /// - Üst kısım: mini player (drag handle + durum satırı) — her zaman görünür
 /// - Alt kısım: full sheet içeriği (tab bar + tab view) — panel açıldığında görünür
 ///
-/// Bu yapı sayesinde mini player ile full sheet içeriği hiçbir zaman üst üste binmez.
+/// [scrollController] SlidingUpPanel'dan gelir; panel içindeki scroll ile
+/// panel pozisyonunu senkronize eder.
 class GenerationCombinedPanel extends StatefulWidget {
   final GenerationQueueViewModel queueVm;
+  final ScrollController? scrollController;
 
-  const GenerationCombinedPanel({super.key, required this.queueVm});
+  const GenerationCombinedPanel({
+    super.key,
+    required this.queueVm,
+    this.scrollController,
+  });
 
   @override
   State<GenerationCombinedPanel> createState() =>
@@ -73,8 +78,14 @@ class _GenerationCombinedPanelState extends State<GenerationCombinedPanel>
                       child: TabBarView(
                         controller: _tabController,
                         children: [
-                          _NowTab(vm: widget.queueVm),
-                          _HistoryTab(vm: widget.queueVm),
+                          _NowTab(
+                            vm: widget.queueVm,
+                            scrollController: widget.scrollController,
+                          ),
+                          _HistoryTab(
+                            vm: widget.queueVm,
+                            scrollController: widget.scrollController,
+                          ),
                         ],
                       ),
                     ),
@@ -152,39 +163,6 @@ class _MiniHeader extends StatelessWidget {
   }
 }
 
-/// Eski standalone full sheet — artık GenerationCombinedPanel içinde kullanılıyor.
-@Deprecated('GenerationCombinedPanel kullan')
-class GenerationFullSheet extends StatefulWidget {
-  final GenerationQueueViewModel queueVm;
-
-  const GenerationFullSheet({super.key, required this.queueVm});
-
-  @override
-  State<GenerationFullSheet> createState() => _GenerationFullSheetState();
-}
-
-class _GenerationFullSheetState extends State<GenerationFullSheet>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GenerationCombinedPanel(queueVm: widget.queueVm);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Tab bar
 // ---------------------------------------------------------------------------
@@ -227,8 +205,9 @@ class _SheetTabBar extends StatelessWidget {
 
 class _NowTab extends StatelessWidget {
   final GenerationQueueViewModel vm;
+  final ScrollController? scrollController;
 
-  const _NowTab({required this.vm});
+  const _NowTab({required this.vm, this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +222,7 @@ class _NowTab extends StatelessWidget {
     }
 
     return ListView(
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
       children: [
         if (active != null) ...[
@@ -686,8 +666,9 @@ class _QueueItemCard extends StatelessWidget {
 
 class _HistoryTab extends StatelessWidget {
   final GenerationQueueViewModel vm;
+  final ScrollController? scrollController;
 
-  const _HistoryTab({required this.vm});
+  const _HistoryTab({required this.vm, this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -700,6 +681,7 @@ class _HistoryTab extends StatelessWidget {
     }
 
     return ListView.builder(
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
       itemCount: vm.history.length,
       itemBuilder: (context, index) {
@@ -1140,8 +1122,8 @@ class _MiniActionButtons extends StatelessWidget {
 }
 
 /// Eski overlay widget — geriye dönük uyumluluk için tutuldu.
-/// Artık WeSlide entegrasyonu ile kullanılmıyor.
-@Deprecated('WeSlide entegrasyonu ile artık kullanılmıyor')
+/// Artık SlidingUpPanel entegrasyonu ile kullanılmıyor.
+@Deprecated('SlidingUpPanel entegrasyonu ile artık kullanılmıyor')
 class GenerationBottomSheetOverlay extends StatelessWidget {
   const GenerationBottomSheetOverlay({super.key});
 

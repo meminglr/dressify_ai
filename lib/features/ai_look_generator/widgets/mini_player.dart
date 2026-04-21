@@ -6,7 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../models/generation_status.dart';
 import '../viewmodels/generation_queue_view_model.dart';
 
-/// Mini player — WeSlide'ın panelHeader'ı olarak kullanılır.
+/// Mini player — SlidingUpPanel'ın collapsed (mini) seviyesinde görünen header.
 ///
 /// Yükseklik: 88px. Kullanıcı bu alana dokunarak veya yukarı kaydırarak
 /// full sheet'i açabilir. Aşağı kaydırarak kapatabilir.
