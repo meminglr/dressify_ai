@@ -34,6 +34,7 @@ class ProfileViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? _successMessage;
   int _selectedTabIndex = 0;
+  bool _isDisposed = false;
 
   RealtimeChannel? _profileChannel;
   RealtimeChannel? _mediaChannel;
@@ -139,8 +140,15 @@ class ProfileViewModel extends ChangeNotifier {
       if (_mediaList.isEmpty) {
         await _loadMediaList(resolvedUserId);
       }
-      _subscribeToProfileChanges(resolvedUserId);
-      _subscribeToMediaChanges(resolvedUserId);
+      
+      // CRITICAL: Always ensure subscriptions are active, regardless of cache state
+      // This ensures Realtime events (like Trendyol product saves) are captured
+      if (_profileChannel == null) {
+        _subscribeToProfileChanges(resolvedUserId);
+      }
+      if (_mediaChannel == null) {
+        _subscribeToMediaChanges(resolvedUserId);
+      }
     } catch (error) {
       _handleError(error);
     }
@@ -410,8 +418,12 @@ class ProfileViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Load ALL media items (no limit) to prevent data loss
       final serviceMediaList =
-          await _mediaService.getMediaList(userId: userId);
+          await _mediaService.getMediaList(
+            userId: userId,
+            limit: 1000, // High limit to get all items
+          );
       _mediaList = serviceMediaList.map(_mapMedia).toList();
       _isMediaLoading = false;
       notifyListeners();
@@ -424,6 +436,8 @@ class ProfileViewModel extends ChangeNotifier {
     _profileChannel = _profileService.subscribeToProfileChanges(
       userId,
       (updatedProfile) {
+        // Check if ViewModel is still active before processing events
+        if (_isDisposed) return;
         _profile = _mapProfile(updatedProfile, userId);
         notifyListeners();
       },
@@ -434,6 +448,9 @@ class ProfileViewModel extends ChangeNotifier {
     _mediaChannel = _mediaService.subscribeToMediaChanges(
       userId,
       (event) {
+        // Check if ViewModel is still active before processing events
+        if (_isDisposed) return;
+        
         if (event.type == MediaEventType.insert && event.media != null) {
           final uiMedia = _mapMedia(event.media!);
           if (!_mediaList.any((m) => m.id == uiMedia.id)) {
@@ -556,6 +573,7 @@ class ProfileViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _unsubscribeAll();
     super.dispose();
   }
