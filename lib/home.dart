@@ -119,8 +119,12 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   Widget _buildTabBody(
       BuildContext context, GenerationQueueViewModel queueVm) {
     final existingPadding = MediaQuery.of(context).padding;
-    final miniLift =
-        queueVm.isBottomSheetVisible ? _miniPlayerHeight : 0.0;
+    // Mini player görünürken bottom bar'ı yukarı it
+    // Mini player height + gap arası boşluk
+    const gapBetween = 10.0;
+    final miniLift = queueVm.isBottomSheetVisible 
+        ? _miniPlayerHeight + gapBetween 
+        : 0.0;
     final adjustedPadding = existingPadding.copyWith(
       bottom: existingPadding.bottom + miniLift,
     );
@@ -313,9 +317,12 @@ class _QueuePanelState extends State<_QueuePanel> {
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    // BottomBar offset=10, mini player bottom bar'ın hemen üstünde
+    
+    // BottomBar: offset(10) + bottomPadding konumunda, floating
+    // Mini player: BottomBar'ın hemen altında (gap yok, sheet daha aşağıda)
     const barOffset = 10.0;
-
+    
+    // Mini player'ın bottom'u = barOffset + bottomPadding (navbar ile aynı seviyede)
     _miniExtent = widget.miniPlayerHeight + barOffset + bottomPadding;
     _maxExtent = screenHeight * 0.92;
     _extentsReady = true;
