@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:sliding_up_panel/sliding_up_panel.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/generation_queue_item.dart';
@@ -42,16 +41,14 @@ class GenerationQueueViewModel extends ChangeNotifier {
   final _uuid = const Uuid();
 
   // ---------------------------------------------------------------------------
-  // PanelController — View tarafından attach edilir, ViewModel sahiplenmez
+  // View callbacks — View tarafından set edilir, ViewModel sahiplenmez
   // ---------------------------------------------------------------------------
 
-  /// SlidingUpPanel controller'ını dışarıdan set etmek için kullanılır.
-  /// [_HomeState] tarafından set edilir, ViewModel controller'ı sahiplenmez.
-  PanelController? _panelController;
+  /// Sheet'i tam açmak için View'dan set edilir.
+  VoidCallback? onExpandRequested;
 
-  void attachPanelController(PanelController controller) {
-    _panelController = controller;
-  }
+  /// Sheet'i mini player'a indirmek için View'dan set edilir.
+  VoidCallback? onMinimizeRequested;
 
   // ---------------------------------------------------------------------------
   // State
@@ -130,10 +127,33 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
     _queue.add(item);
     showBottomSheet();
+    
+    // Eğer queue boşsa (ilk item), hemen processing'e al
+    final shouldStartImmediately = !_isProcessingQueue && _queue.length == 1;
+    
     notifyListeners();
 
     // Start processing if not already running
-    _processQueue();
+    if (shouldStartImmediately) {
+      // İlk item'ı hemen processing'e al (senkron)
+      _activeGeneration = _queue.removeAt(0).copyWith(
+        status: GenerationStatus.processing,
+      );
+      _isProcessingQueue = true;
+      notifyListeners();
+      
+      // Async processing'i başlat
+      _processItem(_activeGeneration!).then((_) {
+        _isProcessingQueue = false;
+        _activeGeneration = null;
+        notifyListeners();
+        // Sırada başka item varsa devam et
+        if (_queue.isNotEmpty) _processQueue();
+      });
+    } else if (!_isProcessingQueue) {
+      _processQueue();
+    }
+    
     return true;
   }
 
@@ -205,8 +225,7 @@ class GenerationQueueViewModel extends ChangeNotifier {
     if (_isMinimized) return;
     _isMinimized = true;
     notifyListeners();
-    // Panel'i collapsed (mini player) seviyesine indir
-    _safeClose();
+    onMinimizeRequested?.call();
   }
 
   void expandBottomSheet() {
@@ -214,30 +233,10 @@ class GenerationQueueViewModel extends ChangeNotifier {
     _isBottomSheetVisible = true;
     _isMinimized = false;
     notifyListeners();
-    // Panel'i tam açık seviyeye çıkar
-    _safeOpen();
-  }
-
-  /// PanelController.close() — sadece attached ve animating değilse çağır.
-  void _safeClose() {
-    final pc = _panelController;
-    if (pc == null || !pc.isAttached) return;
-    if (pc.isPanelAnimating) return;
-    if (pc.isPanelClosed) return;
-    pc.close();
-  }
-
-  /// PanelController.open() — sadece attached ve animating değilse çağır.
-  void _safeOpen() {
-    final pc = _panelController;
-    if (pc == null || !pc.isAttached) return;
-    if (pc.isPanelAnimating) return;
-    if (pc.isPanelOpen) return;
-    pc.open();
+    onExpandRequested?.call();
   }
 
   /// Panel fiziksel olarak collapsed seviyesine indi (View callback'inden çağrılır).
-  /// Controller çağırmaz — sadece state'i senkronize eder.
   void onPanelCollapsed() {
     if (_isMinimized) return;
     _isMinimized = true;
@@ -245,7 +244,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
   }
 
   /// Panel fiziksel olarak tam açıldı (View callback'inden çağrılır).
-  /// Controller çağırmaz — sadece state'i senkronize eder.
   void onPanelExpanded() {
     if (!_isMinimized && _isBottomSheetVisible) return;
     _isBottomSheetVisible = true;
@@ -266,6 +264,11 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
     while (_queue.isNotEmpty) {
       final item = _queue.removeAt(0);
+      
+      // İlk item için hemen processing durumuna geç (await öncesi)
+      _activeGeneration = item.copyWith(status: GenerationStatus.processing);
+      notifyListeners();
+      
       await _processItem(item);
     }
 
@@ -276,18 +279,13 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
   /// Processes a single queue item: calls the n8n API and updates state.
   Future<void> _processItem(GenerationQueueItem item) async {
-    // Mark as processing
-    _activeGeneration = item.copyWith(status: GenerationStatus.processing);
-    notifyListeners();
-
+    // _activeGeneration zaten _processQueue'da set edildi
+    
     // Auto-minimize after 4 seconds so the user can continue browsing
     Future.delayed(const Duration(seconds: 4), () {
       if (_isBottomSheetVisible && !_isMinimized) {
-        // State'i güncelle
         _isMinimized = true;
         notifyListeners();
-        // Panel attached ve hazırsa kapat
-        _safeClose();
       }
     });
 

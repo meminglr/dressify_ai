@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
@@ -493,31 +491,22 @@ class _AppBarGenerateButton extends StatefulWidget {
 }
 
 class _AppBarGenerateButtonState extends State<_AppBarGenerateButton> {
-  Timer? _debounceTimer;
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    super.dispose();
-  }
-
-  void _onTap(BuildContext context) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 1), () async {
-      final success = await widget.selectionViewModel.generateLook();
-      if (!success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lütfen 1 model ve en az 1 kıyafet seçin'),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else if (success) {
-        // Full sheet'i aç — 4 saniye sonra ViewModel otomatik minimize eder
-        GenerationQueueViewModel.instance.expandBottomSheet();
-      }
-    });
+  void _onTap(BuildContext context) async {
+    
+    // Direkt çağır — debounce gereksiz (queue zaten duplicate kontrolü yapıyor)
+    final success = await widget.selectionViewModel.generateLook();
+    if (!success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lütfen 1 model ve en az 1 kıyafet seçin'),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else if (success) {
+      // Full sheet'i aç — 4 saniye sonra ViewModel otomatik minimize eder
+      GenerationQueueViewModel.instance.expandBottomSheet();
+    }
   }
 
   @override

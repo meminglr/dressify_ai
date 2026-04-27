@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_floating_bottom_bar/flutter_floating_bottom_bar.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
-import 'package:sliding_up_panel/sliding_up_panel.dart';
+import 'package:sheet/sheet.dart';
 import 'core/theme/app_colors.dart';
 import 'core/services/supabase_service.dart';
 import 'features/profile/screens/profile_screen.dart';
@@ -35,20 +35,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   late ProfileViewModel profileViewModel;
   late ProductSearchViewModel productSearchViewModel;
 
-  // PanelController burada yaşar — widget lifecycle'ına bağlı
-  final PanelController _panelController = PanelController();
-
-  // SlidingUpPanel panel boyutları
-  static const double _panelMinSize = 88.0; // Mini player yüksekliği
+  static const double _miniPlayerHeight = 80.0;
 
   @override
   void initState() {
     super.initState();
     currentPage = 0;
     tabController = TabController(length: 4, vsync: this);
-
-    // PanelController'ı ViewModel'e bağla
-    GenerationQueueViewModel.instance.attachPanelController(_panelController);
 
     profileViewModel = ProfileViewModel(
       profileService: ProfileService.instance(),
@@ -68,9 +61,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       final value = tabController.animation!.value.round();
       if (value != currentPage && mounted) {
         _bottomBarController.show();
-        setState(() {
-          currentPage = value;
-        });
+        setState(() => currentPage = value);
       }
     });
   }
@@ -86,24 +77,10 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final panelMaxSize = screenHeight * 0.82;
-
     return ChangeNotifierProvider.value(
       value: GenerationQueueViewModel.instance,
       child: Consumer<GenerationQueueViewModel>(
         builder: (context, queueVm, _) {
-          final panelMinHeight = queueVm.isBottomSheetVisible
-              ? _panelMinSize + bottomPadding
-              : 0.0;
-
-          // BottomBar'ı mini player yüksekliği kadar yukarı itmek için
-          // sadece içerik yüksekliğini (88px) kullanıyoruz.
-          // bottomPadding _buildTabBody içinde barOffset'e ekleniyor.
-          final barBottomLift =
-              queueVm.isBottomSheetVisible ? _panelMinSize : 0.0;
-
           return PopScope(
             canPop: false,
             onPopInvokedWithResult: (didPop, _) {
@@ -118,40 +95,19 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                 SystemNavigator.pop();
               }
             },
-            // Material: Scaffold dışına çıkınca kaybolan text decoration,
-            // ink splash ve animasyon context'ini geri sağlar.
             child: Material(
               color: AppColors.background,
-              child: SlidingUpPanel(
-                controller: _panelController,
-                minHeight: panelMinHeight,
-                maxHeight: panelMaxSize,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(32),
-                ),
-                backdropEnabled: true,
-                backdropOpacity: 0.3,
-                backdropColor: AppColors.onSurface,
-                backdropTapClosesPanel: true,
-                color: AppColors.surfaceContainerLowest,
-                boxShadow: const [],
-                isDraggable: true,
-                renderPanelSheet: false,
-                onPanelClosed: () {
-                  if (!queueVm.isMinimized) queueVm.onPanelCollapsed();
-                },
-                onPanelOpened: () {
-                  if (queueVm.isMinimized) queueVm.onPanelExpanded();
-                },
-                panelBuilder: (scrollController) => GenerationCombinedPanel(
-                  queueVm: queueVm,
-                  scrollController: scrollController,
-                ),
-                // body: Scaffold burada — kendi SafeArea/padding'ini yönetir
-                body: Scaffold(
-                  backgroundColor: AppColors.background,
-                  body: _buildTabBody(context, barBottomLift),
-                ),
+              child: Stack(
+                children: [
+                  // ── Ana içerik ───────────────────────────────────────────
+                  _buildTabBody(context, queueVm),
+
+                  // ── Queue panel (her zaman render, visibility ile kontrol) ──
+                  _QueuePanel(
+                    queueVm: queueVm,
+                    miniPlayerHeight: _miniPlayerHeight,
+                  ),
+                ],
               ),
             ),
           );
@@ -160,15 +116,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _buildTabBody(BuildContext context, double barBottomLift) {
-    // SlidingUpPanel artık Scaffold'un dışında olduğu için BottomBar'ın
-    // SafeArea'sı gerçek bottomPadding'i görür.
-    // barBottomLift: mini player görünürken 88px, yoksa 0.
-    // MediaQuery.padding.bottom'ı SafeArea zaten kapsıyor,
-    // biz sadece mini player için ek lift ekliyoruz.
+  Widget _buildTabBody(
+      BuildContext context, GenerationQueueViewModel queueVm) {
     final existingPadding = MediaQuery.of(context).padding;
+    final miniLift =
+        queueVm.isBottomSheetVisible ? _miniPlayerHeight : 0.0;
     final adjustedPadding = existingPadding.copyWith(
-      bottom: existingPadding.bottom + barBottomLift,
+      bottom: existingPadding.bottom + miniLift,
     );
 
     return MediaQuery(
@@ -262,6 +216,187 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
               : AppColors.outlineVariant,
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// _QueuePanel  —  sheet paketi ile physics-based smooth panel
+// ---------------------------------------------------------------------------
+
+class _QueuePanel extends StatefulWidget {
+  final GenerationQueueViewModel queueVm;
+  final double miniPlayerHeight;
+
+  const _QueuePanel({
+    required this.queueVm,
+    required this.miniPlayerHeight,
+  });
+
+  @override
+  State<_QueuePanel> createState() => _QueuePanelState();
+}
+
+class _QueuePanelState extends State<_QueuePanel> {
+  late SheetController _sheetController;
+
+  // Snap pozisyonları (pixel) — build'de hesaplanır
+  late double _miniExtent;
+  late double _maxExtent;
+  bool _extentsReady = false;
+
+  // İlk görünürlük animasyonu için
+  bool _hasBeenVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheetController = SheetController();
+
+    // ViewModel callback'lerini bağla
+    widget.queueVm.onExpandRequested = _expand;
+    widget.queueVm.onMinimizeRequested = _minimize;
+  }
+
+  @override
+  void dispose() {
+    widget.queueVm.onExpandRequested = null;
+    widget.queueVm.onMinimizeRequested = null;
+    _sheetController.dispose();
+    super.dispose();
+  }
+
+  void _expand() {
+    if (!_extentsReady) return;
+    _sheetController.animateTo(
+      _maxExtent,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+    widget.queueVm.onPanelExpanded();
+  }
+
+  void _minimize() {
+    if (!_extentsReady) return;
+    _sheetController.animateTo(
+      _miniExtent,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeInOutCubic,
+    );
+    widget.queueVm.onPanelCollapsed();
+  }
+
+  void _show() {
+    if (!_extentsReady || _hasBeenVisible) return;
+    _hasBeenVisible = true;
+    // Direkt animate et — microtask bekleme
+    if (mounted && _sheetController.animation.value < 1) {
+      _sheetController.animateTo(
+        _miniExtent,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _hide() {
+    if (!_extentsReady) return;
+    // Mini extent'ten 0'a animate et
+    _sheetController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    // BottomBar offset=10, mini player bottom bar'ın hemen üstünde
+    const barOffset = 10.0;
+
+    _miniExtent = widget.miniPlayerHeight + barOffset + bottomPadding;
+    _maxExtent = screenHeight * 0.92;
+    _extentsReady = true;
+
+    // Visibility değişikliklerini izle
+    final isVisible = widget.queueVm.isBottomSheetVisible;
+    if (isVisible && !_hasBeenVisible) {
+      _show();
+    } else if (!isVisible && _hasBeenVisible) {
+      _hide();
+      _hasBeenVisible = false;
+    }
+
+    return AnimatedBuilder(
+      animation: _sheetController.animation,
+      builder: (context, _) {
+        // Progress hesaplama
+        final currentExtent = _sheetController.animation.value;
+        final progress = (currentExtent / _maxExtent).clamp(0.0, 1.0);
+        final isExpanded = currentExtent > _miniExtent * 1.2;
+
+        return Stack(
+          children: [
+            // Backdrop (sadece expanded'da)
+            if (progress > 0.15)
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _minimize,
+                  child: Container(
+                    color: AppColors.onSurface.withAlpha(
+                      (progress * 80).round(),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Sheet (her zaman render, extent 0 olunca zaten görünmez)
+            Sheet(
+              controller: _sheetController,
+              initialExtent: 0,
+              minExtent: 0,
+              maxExtent: _maxExtent,
+              fit: SheetFit.expand,
+              physics: SnapSheetPhysics(
+                stops: [0, _miniExtent, _maxExtent],
+                relative: false,
+                parent: BouncingSheetPhysics(
+                  parent: ScrollPhysics(),
+                ),
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(24 + 8 * progress),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.onSurface.withAlpha(
+                        (20 + 20 * progress).round(),
+                      ),
+                      blurRadius: 16 + 16 * progress,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: GenerationCombinedPanel(
+                  queueVm: widget.queueVm,
+                  scrollController: null,
+                  isExpanded: isExpanded,
+                  onMiniTap: () {
+                    HapticFeedback.lightImpact();
+                    _expand();
+                    widget.queueVm.expandBottomSheet();
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

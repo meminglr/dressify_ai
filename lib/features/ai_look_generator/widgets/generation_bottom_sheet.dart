@@ -20,11 +20,15 @@ import 'empty_state_widget.dart';
 class GenerationCombinedPanel extends StatefulWidget {
   final GenerationQueueViewModel queueVm;
   final ScrollController? scrollController;
+  final bool isExpanded;
+  final VoidCallback? onMiniTap;
 
   const GenerationCombinedPanel({
     super.key,
     required this.queueVm,
     this.scrollController,
+    this.isExpanded = false,
+    this.onMiniTap,
   });
 
   @override
@@ -66,32 +70,34 @@ class _GenerationCombinedPanelState extends State<GenerationCombinedPanel>
               _MiniHeader(
                 queueVm: widget.queueVm,
                 bottomPadding: bottomPadding,
+                onTap: widget.onMiniTap,
               ),
 
-              // ── Full sheet içeriği (panel açıldığında görünür) ──────────
-              Expanded(
-                child: Column(
-                  children: [
-                    _SheetTabBar(controller: _tabController),
-                    const Divider(height: 1, color: Color(0xFFEEEEEE)),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _NowTab(
-                            vm: widget.queueVm,
-                            scrollController: widget.scrollController,
-                          ),
-                          _HistoryTab(
-                            vm: widget.queueVm,
-                            scrollController: widget.scrollController,
-                          ),
-                        ],
+              // ── Full sheet içeriği (sadece expanded'da görünür) ─────────
+              if (widget.isExpanded)
+                Expanded(
+                  child: Column(
+                    children: [
+                      _SheetTabBar(controller: _tabController),
+                      const Divider(height: 1, color: Color(0xFFEEEEEE)),
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _NowTab(
+                              vm: widget.queueVm,
+                              scrollController: widget.scrollController,
+                            ),
+                            _HistoryTab(
+                              vm: widget.queueVm,
+                              scrollController: widget.scrollController,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -105,10 +111,12 @@ class _GenerationCombinedPanelState extends State<GenerationCombinedPanel>
 class _MiniHeader extends StatelessWidget {
   final GenerationQueueViewModel queueVm;
   final double bottomPadding;
+  final VoidCallback? onTap;
 
   const _MiniHeader({
     required this.queueVm,
     required this.bottomPadding,
+    this.onTap,
   });
 
   @override
@@ -118,10 +126,11 @@ class _MiniHeader extends StatelessWidget {
         (queueVm.history.isNotEmpty ? queueVm.history.first.status : null);
 
     return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        queueVm.expandBottomSheet();
-      },
+      onTap: onTap ??
+          () {
+            HapticFeedback.lightImpact();
+            queueVm.expandBottomSheet();
+          },
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
         height: 88,
