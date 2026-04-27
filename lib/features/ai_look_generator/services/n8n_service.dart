@@ -121,8 +121,22 @@ class N8nService {
         throw N8nException('Look oluşturulamadı. Lütfen tekrar deneyin');
       }
 
+      // Validate required fields
+      final imageUrl = data['image_url'] as String?;
+      final mediaId = data['media_id'];
+      
+      if (imageUrl == null || imageUrl.isEmpty) {
+        debugPrint('N8nService: missing or empty image_url in response — $data');
+        throw N8nException('Görüntü URL\'si alınamadı. Lütfen tekrar deneyin');
+      }
+      
+      if (mediaId == null) {
+        debugPrint('N8nService: missing media_id in response — $data');
+        throw N8nException('Medya ID\'si alınamadı. Lütfen tekrar deneyin');
+      }
+
       debugPrint(
-        'N8nService: generation succeeded, media_id=${data['media_id']}',
+        'N8nService: generation succeeded, media_id=$mediaId, image_url=$imageUrl',
       );
       return data;
     } on N8nException {

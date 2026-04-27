@@ -293,12 +293,20 @@ class GenerationQueueViewModel extends ChangeNotifier {
       final result = await _n8nService.generateLook(request: item.request);
 
       final imageUrl = result['image_url'] as String?;
-      final mediaId = result['media_id'] as String?;
+      final mediaId = result['media_id'];
+
+      // Double-check: N8nService should have validated these, but be defensive
+      if (imageUrl == null || imageUrl.isEmpty) {
+        throw N8nException('Görüntü URL\'si alınamadı');
+      }
+      if (mediaId == null) {
+        throw N8nException('Medya ID\'si alınamadı');
+      }
 
       final completed = _activeGeneration!.copyWith(
         status: GenerationStatus.completed,
         resultImageUrl: imageUrl,
-        resultMediaId: mediaId,
+        resultMediaId: mediaId.toString(),
       );
 
       _activeGeneration = completed;
