@@ -504,8 +504,7 @@ class _AppBarGenerateButtonState extends State<_AppBarGenerateButton> {
         ),
       );
     } else if (success) {
-      // Full sheet'i aç — 4 saniye sonra ViewModel otomatik minimize eder
-      GenerationQueueViewModel.instance.expandBottomSheet();
+      // Look kuyruğa eklendi — kullanıcı FAB'a tıklayarak kuyruğu görebilir
     }
   }
 

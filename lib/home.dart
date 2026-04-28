@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_floating_bottom_bar/flutter_floating_bottom_bar.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
-import 'package:sheet/sheet.dart';
 import 'core/theme/app_colors.dart';
 import 'core/services/supabase_service.dart';
 import 'features/profile/screens/profile_screen.dart';
@@ -16,7 +15,7 @@ import 'features/trendyol/services/trendyol_service.dart';
 import 'features/trendyol/services/saved_product_service.dart';
 import 'features/ai_look_generator/screens/selection_screen.dart';
 import 'features/ai_look_generator/viewmodels/generation_queue_view_model.dart';
-import 'features/ai_look_generator/widgets/enhanced_generation_bottom_sheet.dart';
+import 'features/ai_look_generator/widgets/queue_bottom_sheet.dart';
 import 'services/profile_service.dart';
 import 'services/media_service.dart';
 import 'services/storage_service.dart';
@@ -34,8 +33,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   final BottomBarController _bottomBarController = BottomBarController();
   late ProfileViewModel profileViewModel;
   late ProductSearchViewModel productSearchViewModel;
-
-  static const double _miniPlayerHeight = 80.0;
 
   @override
   void initState() {
@@ -80,6 +77,19 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
+  void _openQueueSheet(BuildContext context) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: GenerationQueueViewModel.instance,
+        child: const QueueBottomSheet(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
@@ -90,10 +100,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             canPop: false,
             onPopInvokedWithResult: (didPop, _) {
               if (didPop) return;
-              if (queueVm.isBottomSheetVisible && !queueVm.isMinimized) {
-                queueVm.minimizeBottomSheet();
-                return;
-              }
               if (tabController.index != 0) {
                 tabController.animateTo(0);
               } else {
@@ -107,11 +113,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                   // ── Ana içerik ───────────────────────────────────────────
                   _buildTabBody(context, queueVm),
 
-                  // ── Queue panel ──────────────────────────────────────────
-                  _QueuePanel(
-                    queueVm: queueVm,
-                    miniPlayerHeight: _miniPlayerHeight,
-                  ),
+                  // ── Floating Action Button (nav bar üstünde) ─────────────
+                  _QueueFab(onTap: () => _openQueueSheet(context)),
                 ],
               ),
             ),
@@ -123,51 +126,39 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   Widget _buildTabBody(
       BuildContext context, GenerationQueueViewModel queueVm) {
-    final existingPadding = MediaQuery.of(context).padding;
-    // Mini player görünürken bottom bar'ı yukarı it
-    // Mini player height + gap arası boşluk
-    const gapBetween = 10.0;
-    final miniLift = queueVm.isBottomSheetVisible 
-        ? _miniPlayerHeight + gapBetween 
-        : 0.0;
-    final adjustedPadding = existingPadding.copyWith(
-      bottom: existingPadding.bottom + miniLift,
-    );
-
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(padding: adjustedPadding),
-      child: BottomBar(
-        controller: _bottomBarController,
-        fit: StackFit.expand,
-        borderRadius: BorderRadius.circular(40),
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.decelerate,
-        showIcon: false,
-        width: MediaQuery.of(context).size.width * 0.8,
-        barColor: AppColors.surfaceContainerLowest,
-        barDecoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(50),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.onSurface.withAlpha(15),
-              blurRadius: 48,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        start: 2,
-        end: 0,
-        offset: 10,
-        barAlignment: Alignment.bottomCenter,
-        iconHeight: 35,
-        iconWidth: 35,
-        reverse: false,
-        hideOnScroll: true,
-        scrollOpposite: false,
-        onBottomBarHidden: () {},
-        onBottomBarShown: () {},
-        body: (context, controller) => TabBarView(
+    return BottomBar(
+      controller: _bottomBarController,
+      fit: StackFit.expand,
+      borderRadius: BorderRadius.circular(40),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.decelerate,
+      showIcon: false,
+      width: MediaQuery.of(context).size.width * 0.8,
+      barColor: AppColors.surfaceContainerLowest,
+      barDecoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(50),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.onSurface.withAlpha(15),
+            blurRadius: 48,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      start: 2,
+      end: 0,
+      offset: 10,
+      barAlignment: Alignment.bottomCenter,
+      iconHeight: 35,
+      iconWidth: 35,
+      reverse: false,
+      hideOnScroll: true,
+      scrollOpposite: false,
+      onBottomBarHidden: () {},
+      onBottomBarShown: () {},
+      body: (context, controller) {
+        return TabBarView(
           controller: tabController,
           dragStartBehavior: DragStartBehavior.down,
           physics: const BouncingScrollPhysics(),
@@ -189,25 +180,25 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
               ),
             ),
           ],
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: TabBar(
-            dividerColor: Colors.transparent,
-            indicatorPadding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
-            controller: tabController,
-            indicator: UnderlineTabIndicator(
-              borderSide:
-                  const BorderSide(color: AppColors.primary, width: 3),
-              insets: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            ),
-            tabs: [
-              _buildTab(Iconsax.home, 0),
-              _buildTab(Iconsax.shop, 1),
-              _buildTab(Iconsax.category, 2),
-              _buildTab(Iconsax.user, 3),
-            ],
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: TabBar(
+          dividerColor: Colors.transparent,
+          indicatorPadding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
+          controller: tabController,
+          indicator: UnderlineTabIndicator(
+            borderSide:
+                const BorderSide(color: AppColors.primary, width: 3),
+            insets: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           ),
+          tabs: [
+            _buildTab(Iconsax.home, 0),
+            _buildTab(Iconsax.shop, 1),
+            _buildTab(Iconsax.category, 2),
+            _buildTab(Iconsax.user, 3),
+          ],
         ),
       ),
     );
@@ -230,187 +221,80 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 }
 
 // ---------------------------------------------------------------------------
-// _QueuePanel  —  sheet paketi ile physics-based smooth panel
+// _QueueFab  —  navigasyon barının hemen üstünde floating action button
 // ---------------------------------------------------------------------------
 
-class _QueuePanel extends StatefulWidget {
-  final GenerationQueueViewModel queueVm;
-  final double miniPlayerHeight;
+class _QueueFab extends StatelessWidget {
+  final VoidCallback onTap;
 
-  const _QueuePanel({
-    required this.queueVm,
-    required this.miniPlayerHeight,
-  });
-
-  @override
-  State<_QueuePanel> createState() => _QueuePanelState();
-}
-
-class _QueuePanelState extends State<_QueuePanel> {
-  late SheetController _sheetController;
-
-  // Snap pozisyonları (pixel) — build'de hesaplanır
-  late double _miniExtent;
-  late double _maxExtent;
-  bool _extentsReady = false;
-
-  // İlk görünürlük animasyonu için
-  bool _hasBeenVisible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _sheetController = SheetController();
-
-    // ViewModel callback'lerini bağla
-    widget.queueVm.onExpandRequested = _expand;
-    widget.queueVm.onMinimizeRequested = _minimize;
-  }
-
-  @override
-  void dispose() {
-    widget.queueVm.onExpandRequested = null;
-    widget.queueVm.onMinimizeRequested = null;
-    _sheetController.dispose();
-    super.dispose();
-  }
-
-  void _expand() {
-    if (!_extentsReady) return;
-    _sheetController.animateTo(
-      _maxExtent,
-      duration: const Duration(milliseconds: 380),
-      curve: Curves.easeOutCubic,
-    );
-    widget.queueVm.onPanelExpanded();
-  }
-
-  void _minimize() {
-    if (!_extentsReady) return;
-    _sheetController.animateTo(
-      _miniExtent,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeInOutCubic,
-    );
-    widget.queueVm.onPanelCollapsed();
-  }
-
-  void _show() {
-    if (!_extentsReady || _hasBeenVisible) return;
-    _hasBeenVisible = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _sheetController.animateTo(
-          _miniExtent,
-          duration: const Duration(milliseconds: 320),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
-  }
-
-  void _hide() {
-    if (!_extentsReady) return;
-    // Mini extent'ten 0'a animate et
-    _sheetController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInCubic,
-    );
-  }
+  const _QueueFab({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    
-    // BottomBar: offset(10) + bottomPadding konumunda, floating
-    // Mini player: BottomBar'ın hemen altında (gap yok, sheet daha aşağıda)
+    // Nav bar yüksekliği ~71 (55 tab + 8*2 padding) + offset(10) + bottomPadding
+    const navBarHeight = 71.0;
     const barOffset = 10.0;
-    
-    // Mini player'ın bottom'u = barOffset + bottomPadding (navbar ile aynı seviyede)
-    _miniExtent = widget.miniPlayerHeight + barOffset + bottomPadding;
-    _maxExtent = screenHeight * 0.92;
-    _extentsReady = true;
+    const fabSize = 48.0;
+    const gap = 12.0;
 
-    // Visibility değişikliklerini izle
-    final isVisible = widget.queueVm.isBottomSheetVisible;
-    if (isVisible && !_hasBeenVisible) {
-      _show();
-    } else if (!isVisible && _hasBeenVisible) {
-      _hide();
-      _hasBeenVisible = false;
-    }
+    final bottomPosition = bottomPadding + barOffset + navBarHeight + gap;
 
-    return AnimatedBuilder(
-      animation: _sheetController.animation,
-      builder: (context, _) {
-        // SheetController.animation.value = mevcut pixel pozisyonu (0 → maxExtent)
-        final currentPixels = _sheetController.animation.value;
+    return Consumer<GenerationQueueViewModel>(
+      builder: (context, queueVm, _) {
+        final hasActive = queueVm.isProcessing || queueVm.hasQueue;
 
-        // Progress: backdrop ve border-radius animasyonu için (0.0 → 1.0)
-        final range = _maxExtent - _miniExtent;
-        final progress = range > 0
-            ? ((currentPixels - _miniExtent) / range).clamp(0.0, 1.0)
-            : 0.0;
-
-        return Stack(
-          children: [
-            // Backdrop (sadece expanded'da)
-            if (progress > 0.15)
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: _minimize,
-                  child: Container(
-                    color: AppColors.onSurface.withAlpha(
-                      (progress * 80).round(),
-                    ),
+        return Positioned(
+          bottom: bottomPosition,
+          right: 20,
+          child: GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              width: fabSize,
+              height: fabSize,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withAlpha(80),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
                   ),
-                ),
+                ],
               ),
-
-            // Sheet (her zaman render, extent 0 olunca zaten görünmez)
-            Sheet(
-              controller: _sheetController,
-              initialExtent: 0,
-              minExtent: 0,
-              maxExtent: _maxExtent,
-              fit: SheetFit.expand,
-              resizable: false,
-              physics: SnapSheetPhysics(
-                stops: [0, _miniExtent, _maxExtent],
-                relative: false,
-                parent: const BouncingSheetPhysics(
-                  parent: ScrollPhysics(),
-                ),
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLowest,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(24 + 8 * progress),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Icon(
+                    Iconsax.magic_star,
+                    color: Colors.white,
+                    size: 22,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.onSurface.withAlpha(
-                        (20 + 20 * progress).round(),
+                  // Aktif işlem varsa küçük badge
+                  if (hasActive)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 1.5,
+                          ),
+                        ),
                       ),
-                      blurRadius: 16 + 16 * progress,
-                      offset: const Offset(0, -4),
                     ),
-                  ],
-                ),
-                child: EnhancedGenerationBottomSheet(
-                  queueVm: widget.queueVm,
-                  onMiniTap: () {
-                    HapticFeedback.lightImpact();
-                    _expand();
-                    widget.queueVm.expandBottomSheet();
-                  },
-                ),
+                ],
               ),
             ),
-          ],
+          ),
         );
       },
     );

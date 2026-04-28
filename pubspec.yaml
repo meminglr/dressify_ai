@@ -30,7 +30,6 @@ dependencies:
   pull_down_button: ^0.10.2
   share_plus: ^13.0.0
   sliding_up_panel: ^2.0.0+1
-  sheet: ^1.0.0
 
 dev_dependencies:
   flutter_test:

@@ -45,16 +45,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
   final GenerationQueueService _queueService;
 
   // ---------------------------------------------------------------------------
-  // View callbacks — View tarafından set edilir, ViewModel sahiplenmez
-  // ---------------------------------------------------------------------------
-
-  /// Sheet'i tam açmak için View'dan set edilir.
-  VoidCallback? onExpandRequested;
-
-  /// Sheet'i mini player'a indirmek için View'dan set edilir.
-  VoidCallback? onMinimizeRequested;
-
-  // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
 
@@ -66,12 +56,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
   /// The item currently being processed, or null if idle.
   GenerationQueueItem? _activeGeneration;
-
-  /// Whether the bottom sheet is currently visible.
-  bool _isBottomSheetVisible = false;
-
-  /// Whether the bottom sheet is in minimized (mini player) state.
-  bool _isMinimized = false;
 
   /// Whether the queue is currently being processed.
   bool _isProcessingQueue = false;
@@ -94,8 +78,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
   GenerationQueueItem? get activeGeneration => _activeGeneration;
   bool get isProcessing => _activeGeneration != null;
   bool get hasQueue => _queue.isNotEmpty;
-  bool get isBottomSheetVisible => _isBottomSheetVisible;
-  bool get isMinimized => _isMinimized;
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
 
@@ -145,7 +127,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
       // Resume processing if there's an active item or queued items
       if (_activeGeneration != null || _queue.isNotEmpty) {
-        showBottomSheet();
         if (_activeGeneration != null) {
           _isProcessingQueue = true;
           _resumeProcessing(_activeGeneration!);
@@ -205,7 +186,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
       );
 
       _queue.add(item);
-      showBottomSheet();
 
       // Eğer queue boşsa (ilk item), hemen processing'e al
       final shouldStartImmediately = !_isProcessingQueue && _queue.length == 1;
@@ -311,55 +291,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // Bottom sheet state
-  // ---------------------------------------------------------------------------
-
-  void showBottomSheet() {
-    if (_isBottomSheetVisible) return;
-    _isBottomSheetVisible = true;
-    _isMinimized = false;
-    notifyListeners();
-    // Panel görünür hale gelir (minHeight > 0 olduğu için zaten görünür)
-  }
-
-  void hideBottomSheet() {
-    if (!_isBottomSheetVisible) return;
-    _isBottomSheetVisible = false;
-    notifyListeners();
-    // panelMinSize = 0 yapılarak panel gizlenir (Home rebuild ile)
-  }
-
-  void minimizeBottomSheet() {
-    if (_isMinimized) return;
-    _isMinimized = true;
-    notifyListeners();
-    onMinimizeRequested?.call();
-  }
-
-  void expandBottomSheet() {
-    if (!_isMinimized && _isBottomSheetVisible) return;
-    _isBottomSheetVisible = true;
-    _isMinimized = false;
-    notifyListeners();
-    onExpandRequested?.call();
-  }
-
-  /// Panel fiziksel olarak collapsed seviyesine indi (View callback'inden çağrılır).
-  void onPanelCollapsed() {
-    if (_isMinimized) return;
-    _isMinimized = true;
-    notifyListeners();
-  }
-
-  /// Panel fiziksel olarak tam açıldı (View callback'inden çağrılır).
-  void onPanelExpanded() {
-    if (!_isMinimized && _isBottomSheetVisible) return;
-    _isBottomSheetVisible = true;
-    _isMinimized = false;
-    notifyListeners();
-  }
-
-  // ---------------------------------------------------------------------------
   // Queue processing (internal)
   // ---------------------------------------------------------------------------
 
@@ -403,14 +334,6 @@ class GenerationQueueViewModel extends ChangeNotifier {
   Future<void> _processItem(GenerationQueueItem item) async {
     final startTime = DateTime.now();
     
-    // Auto-minimize after 4 seconds so the user can continue browsing
-    Future.delayed(const Duration(seconds: 4), () {
-      if (_isBottomSheetVisible && !_isMinimized) {
-        _isMinimized = true;
-        notifyListeners();
-      }
-    });
-
     try {
       final result = await _n8nService.generateLook(request: item.request);
 

@@ -1,10 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:intl/intl.dart';
-import 'package:sheet/sheet.dart';
+import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../models/generation_queue_item.dart';
@@ -12,30 +11,16 @@ import '../models/generation_status.dart';
 import '../viewmodels/generation_queue_view_model.dart';
 import 'empty_state_widget.dart';
 
-/// Enhanced generation bottom sheet with profile-style tab bar design.
-///
-/// Features:
-/// - Profil ekranındaki tabbar tasarımı ile tutarlı
-/// - "Şu An" ve "Geçmiş" sekmeleri
-/// - Supabase entegrasyonu ile kalıcı geçmiş
-/// - Gelişmiş animasyonlar ve durum göstergeleri
-class EnhancedGenerationBottomSheet extends StatefulWidget {
-  final GenerationQueueViewModel queueVm;
-  final VoidCallback? onMiniTap;
-
-  const EnhancedGenerationBottomSheet({
-    super.key,
-    required this.queueVm,
-    this.onMiniTap,
-  });
+/// Modal bottom sheet that shows the generation queue and history.
+/// Opened via the floating action button in [Home].
+class QueueBottomSheet extends StatefulWidget {
+  const QueueBottomSheet({super.key});
 
   @override
-  State<EnhancedGenerationBottomSheet> createState() =>
-      _EnhancedGenerationBottomSheetState();
+  State<QueueBottomSheet> createState() => _QueueBottomSheetState();
 }
 
-class _EnhancedGenerationBottomSheetState
-    extends State<EnhancedGenerationBottomSheet>
+class _QueueBottomSheetState extends State<QueueBottomSheet>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -53,34 +38,79 @@ class _EnhancedGenerationBottomSheetState
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.queueVm,
-      builder: (context, _) {
-        return Column(
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            // ── Mini player header ──────────────────────────────────────
-            _MiniHeader(
-              queueVm: widget.queueVm,
-              onTap: widget.onMiniTap,
-            ),
-            // Profile-style tab bar
-            _ProfileStyleTabBar(
-              controller: _tabController,
-              activeCount: widget.queueVm.totalPending,
-              historyCount: widget.queueVm.history.length,
-            ),
-            const Divider(height: 1, color: Color(0xFFEEEEEE)),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _ActiveTab(vm: widget.queueVm),
-                  _HistoryTab(vm: widget.queueVm),
-                ],
+    final screenHeight = MediaQuery.of(context).size.height;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Consumer<GenerationQueueViewModel>(
+      builder: (context, queueVm, _) {
+        return Container(
+          height: screenHeight * 0.92,
+          decoration: const BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              // ── Drag handle ──────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 4),
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.outlineVariant.withAlpha(120),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
-          ],
+
+              // ── Başlık ───────────────────────────────────────────────────
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    Text(
+                      'AI Look Kuyruğu',
+                      style: GoogleFonts.manrope(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.onSurface,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(context).pop(),
+                      color: AppColors.outlineVariant,
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Tab bar ──────────────────────────────────────────────────
+              _QueueTabBar(
+                controller: _tabController,
+                activeCount: queueVm.totalPending,
+                historyCount: queueVm.history.length,
+              ),
+              const Divider(height: 1, color: Color(0xFFEEEEEE)),
+
+              // ── İçerik ───────────────────────────────────────────────────
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _ActiveTab(vm: queueVm),
+                    _HistoryTab(vm: queueVm),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: bottomPadding),
+            ],
+          ),
         );
       },
     );
@@ -88,226 +118,15 @@ class _EnhancedGenerationBottomSheetState
 }
 
 // =============================================================================
-// Mini Header
+// Tab Bar
 // =============================================================================
 
-class _MiniHeader extends StatelessWidget {
-  final GenerationQueueViewModel queueVm;
-  final VoidCallback? onTap;
-
-  const _MiniHeader({
-    required this.queueVm,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final active = queueVm.activeGeneration;
-    final status = active?.status ??
-        (queueVm.history.isNotEmpty ? queueVm.history.first.status : null);
-
-    return GestureDetector(
-      onTap: onTap ??
-          () {
-            HapticFeedback.lightImpact();
-            queueVm.expandBottomSheet();
-          },
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        height: 88,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Padding(
-              padding: const EdgeInsets.only(top: 10, bottom: 6),
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.outlineVariant.withAlpha(120),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            // Durum satırı
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    _MiniStatusIndicator(status: status),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: _MiniStatusText(vm: queueVm, status: status),
-                    ),
-                    _MiniActionButtons(vm: queueVm),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniStatusIndicator extends StatelessWidget {
-  final GenerationStatus? status;
-
-  const _MiniStatusIndicator({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: switch (status) {
-        GenerationStatus.processing || null => const _SpinningProgress(),
-        GenerationStatus.completed => _StatusIconBadge(
-            icon: Iconsax.tick_circle5,
-            color: const Color(0xFF10B981),
-          ),
-        GenerationStatus.failed => _StatusIconBadge(
-            icon: Iconsax.warning_2,
-            color: const Color(0xFFEF4444),
-          ),
-        GenerationStatus.queued => _StatusIconBadge(
-            icon: Iconsax.clock,
-            color: AppColors.outlineVariant,
-          ),
-      },
-    );
-  }
-}
-
-class _SpinningProgress extends StatelessWidget {
-  const _SpinningProgress();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: CircularProgressIndicator(
-        strokeWidth: 3,
-        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-        backgroundColor: AppColors.primary.withAlpha(30),
-      ),
-    );
-  }
-}
-
-class _StatusIconBadge extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-
-  const _StatusIconBadge({required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: color.withAlpha(22),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(icon, color: color, size: 20),
-    );
-  }
-}
-
-class _MiniStatusText extends StatelessWidget {
-  final GenerationQueueViewModel vm;
-  final GenerationStatus? status;
-
-  const _MiniStatusText({required this.vm, required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (title, subtitle) = _getStatusText();
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (subtitle != null)
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.outlineVariant,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-      ],
-    );
-  }
-
-  (String, String?) _getStatusText() {
-    if (status == GenerationStatus.processing) {
-      return ('Look oluşturuluyor...', '30-90 saniye sürebilir');
-    } else if (status == GenerationStatus.completed) {
-      return ('Look hazır!', 'Görüntülemek için dokun');
-    } else if (status == GenerationStatus.failed) {
-      return ('Hata oluştu', 'Tekrar denemek için dokun');
-    } else if (vm.queue.isNotEmpty) {
-      return ('${vm.queue.length} look sırada', 'İşleniyor...');
-    } else {
-      return ('Henüz look oluşturmadın', 'Hemen başla');
-    }
-  }
-}
-
-class _MiniActionButtons extends StatelessWidget {
-  final GenerationQueueViewModel vm;
-
-  const _MiniActionButtons({required this.vm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Iconsax.arrow_up_2, size: 20),
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            vm.expandBottomSheet();
-          },
-          tooltip: 'Genişlet',
-          color: AppColors.primary,
-        ),
-      ],
-    );
-  }
-}
-
-
-// =============================================================================
-// Profile-Style Tab Bar
-// =============================================================================
-
-class _ProfileStyleTabBar extends StatelessWidget {
+class _QueueTabBar extends StatelessWidget {
   final TabController controller;
   final int activeCount;
   final int historyCount;
 
-  const _ProfileStyleTabBar({
+  const _QueueTabBar({
     required this.controller,
     required this.activeCount,
     required this.historyCount,
@@ -428,13 +247,7 @@ class _ActiveTab extends StatelessWidget {
       );
     }
 
-    // SheetScrollable'dan sheet-aware scroll controller al
-    // Bu sayede liste başındayken aşağı swipe → sheet minimize olur
-    final sheetScrollable = SheetScrollable.of(context);
-    final scrollController = sheetScrollable?.position.scrollController;
-
     return ListView(
-      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
       children: [
         if (active != null) ...[
@@ -455,7 +268,8 @@ class _ActiveTab extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withAlpha(20),
                   borderRadius: BorderRadius.circular(50),
@@ -512,7 +326,6 @@ class _HistoryTab extends StatelessWidget {
 
     return Column(
       children: [
-        // Clear history button
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
           child: Row(
@@ -533,27 +346,22 @@ class _HistoryTab extends StatelessWidget {
                 label: const Text('Geçmişi Temizle'),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFEF4444),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ],
           ),
         ),
         Expanded(
-          child: Builder(
-            builder: (innerContext) {
-              final sheetScrollable = SheetScrollable.of(innerContext);
-              return ListView.builder(
-                controller: sheetScrollable?.position.scrollController,
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-                itemCount: vm.history.length,
-                itemBuilder: (context, index) {
-                  final item = vm.history[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _HistoryItemCard(item: item, vm: vm),
-                  );
-                },
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+            itemCount: vm.history.length,
+            itemBuilder: (context, index) {
+              final item = vm.history[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _HistoryItemCard(item: item, vm: vm),
               );
             },
           ),
@@ -562,7 +370,8 @@ class _HistoryTab extends StatelessWidget {
     );
   }
 
-  void _showClearHistoryDialog(BuildContext context, GenerationQueueViewModel vm) {
+  void _showClearHistoryDialog(
+      BuildContext context, GenerationQueueViewModel vm) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -580,7 +389,8 @@ class _HistoryTab extends StatelessWidget {
               vm.clearHistory();
               Navigator.of(context).pop();
             },
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444)),
             child: const Text('Temizle'),
           ),
         ],
@@ -588,7 +398,6 @@ class _HistoryTab extends StatelessWidget {
     );
   }
 }
-
 
 // =============================================================================
 // Active Generation Card
@@ -670,7 +479,6 @@ class _ProcessingCardState extends State<_ProcessingCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Küçük önizlemeler — pulse animasyonlu
           AnimatedBuilder(
             animation: _pulseAnim,
             builder: (context, child) => Opacity(
@@ -683,8 +491,6 @@ class _ProcessingCardState extends State<_ProcessingCard>
             ),
           ),
           const SizedBox(height: 20),
-
-          // Başlık
           const Text(
             'Look oluşturuluyor...',
             style: TextStyle(
@@ -704,14 +510,13 @@ class _ProcessingCardState extends State<_ProcessingCard>
             ),
           ),
           const SizedBox(height: 20),
-
-          // Animasyonlu progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               minHeight: 6,
               backgroundColor: AppColors.primary.withAlpha(25),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.primary),
             ),
           ),
         ],
@@ -735,7 +540,6 @@ class _SuccessCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Başarı rozeti
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -760,8 +564,6 @@ class _SuccessCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-
-        // Sonuç görseli
         if (item.resultImageUrl != null)
           ClipRRect(
             borderRadius: BorderRadius.circular(24),
@@ -770,7 +572,7 @@ class _SuccessCard extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: item.resultImageUrl!,
                 fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
+                placeholder: (context, url) => Container(
                   color: AppColors.surfaceContainerLow,
                   child: const Center(
                     child: CircularProgressIndicator(
@@ -779,7 +581,7 @@ class _SuccessCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                errorWidget: (_, __, ___) => Container(
+                errorWidget: (context, url, error) => Container(
                   color: AppColors.surfaceContainerLow,
                   child: const Icon(Iconsax.image, size: 48),
                 ),
@@ -787,8 +589,6 @@ class _SuccessCard extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
-
-        // Zaman damgası
         Text(
           DateFormat('dd MMM yyyy, HH:mm', 'tr_TR').format(item.timestamp),
           style: const TextStyle(
@@ -797,13 +597,11 @@ class _SuccessCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-
-        // Aksiyon butonları
         SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton.icon(
-            onPressed: () => vm.hideBottomSheet(),
+            onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Iconsax.user, size: 18),
             label: const Text('Profilde Görüntüle'),
             style: ElevatedButton.styleFrom(
@@ -825,7 +623,7 @@ class _SuccessCard extends StatelessWidget {
           width: double.infinity,
           height: 56,
           child: OutlinedButton.icon(
-            onPressed: () => vm.hideBottomSheet(),
+            onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Iconsax.magic_star, size: 18),
             label: const Text('Yeni Look Oluştur'),
             style: OutlinedButton.styleFrom(
@@ -910,7 +708,7 @@ class _ErrorCard extends StatelessWidget {
             child: OutlinedButton(
               onPressed: () {
                 vm.removeFromHistory(item.id);
-                vm.hideBottomSheet();
+                Navigator.of(context).pop();
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
@@ -1008,7 +806,6 @@ class _HistoryItemCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Sonuç küçük resmi veya hata ikonu
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: SizedBox(
@@ -1018,7 +815,7 @@ class _HistoryItemCard extends StatelessWidget {
                   ? CachedNetworkImage(
                       imageUrl: item.resultImageUrl!,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
+                      errorWidget: (context, url, error) => Container(
                         color: AppColors.surfaceContainerLow,
                         child: const Icon(Iconsax.image, size: 24),
                       ),
@@ -1034,8 +831,6 @@ class _HistoryItemCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Bilgi
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1052,11 +847,9 @@ class _HistoryItemCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // Aksiyon butonu
           if (isSuccess)
             TextButton(
-              onPressed: () => vm.expandBottomSheet(),
+              onPressed: () => Navigator.of(context).pop(),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1128,7 +921,7 @@ class _ThumbnailsRow extends StatelessWidget {
                 child: CachedNetworkImage(
                   imageUrl: url,
                   fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => Container(
+                  errorWidget: (context, url, error) => Container(
                     color: AppColors.surfaceContainerLow,
                     child: const Icon(Iconsax.image, size: 16),
                   ),
