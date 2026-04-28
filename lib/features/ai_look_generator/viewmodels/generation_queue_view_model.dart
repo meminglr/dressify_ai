@@ -1,12 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/generation_queue_item.dart';
 import '../models/generation_request.dart';
 import '../models/generation_status.dart';
 import '../services/n8n_exception.dart';
 import '../services/n8n_service.dart';
+import '../services/generation_queue_service.dart';
 
 /// Singleton ViewModel managing the AI look generation queue, history, and
 /// the persistent bottom sheet state.
@@ -18,7 +19,8 @@ import '../services/n8n_service.dart';
 /// Queue processing is sequential (FIFO): only one generation runs at a time
 /// to avoid overwhelming the n8n API.
 ///
-/// Session-based: the queue and history are cleared when the app is closed.
+/// **Supabase Integration**: Queue and history are persisted to Supabase,
+/// allowing users to see their generation history across sessions.
 class GenerationQueueViewModel extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Singleton
@@ -31,14 +33,16 @@ class GenerationQueueViewModel extends ChangeNotifier {
       _instance ??= GenerationQueueViewModel._();
 
   /// Private constructor — use [GenerationQueueViewModel.instance].
-  GenerationQueueViewModel._() : _n8nService = N8nService.instance;
+  GenerationQueueViewModel._()
+      : _n8nService = N8nService.instance,
+        _queueService = GenerationQueueService();
 
   // ---------------------------------------------------------------------------
   // Dependencies
   // ---------------------------------------------------------------------------
 
   final N8nService _n8nService;
-  final _uuid = const Uuid();
+  final GenerationQueueService _queueService;
 
   // ---------------------------------------------------------------------------
   // View callbacks — View tarafından set edilir, ViewModel sahiplenmez
@@ -57,7 +61,7 @@ class GenerationQueueViewModel extends ChangeNotifier {
   /// Items waiting to be processed (FIFO order).
   final List<GenerationQueueItem> _queue = [];
 
-  /// Completed (success or failed) items for the current session.
+  /// Completed (success or failed) items - loaded from Supabase.
   final List<GenerationQueueItem> _history = [];
 
   /// The item currently being processed, or null if idle.
@@ -72,6 +76,15 @@ class GenerationQueueViewModel extends ChangeNotifier {
   /// Whether the queue is currently being processed.
   bool _isProcessingQueue = false;
 
+  /// Whether data is being loaded from Supabase.
+  bool _isLoading = false;
+
+  /// Realtime subscription channel.
+  RealtimeChannel? _realtimeChannel;
+
+  /// Whether the ViewModel has been initialized (data loaded from Supabase).
+  bool _isInitialized = false;
+
   // ---------------------------------------------------------------------------
   // Getters
   // ---------------------------------------------------------------------------
@@ -83,9 +96,72 @@ class GenerationQueueViewModel extends ChangeNotifier {
   bool get hasQueue => _queue.isNotEmpty;
   bool get isBottomSheetVisible => _isBottomSheetVisible;
   bool get isMinimized => _isMinimized;
+  bool get isLoading => _isLoading;
+  bool get isInitialized => _isInitialized;
 
   /// Total number of items in queue + active generation.
   int get totalPending => _queue.length + (isProcessing ? 1 : 0);
+
+  // ---------------------------------------------------------------------------
+  // Initialization
+  // ---------------------------------------------------------------------------
+
+  /// Initializes the ViewModel by loading queue and history from Supabase.
+  ///
+  /// Should be called once when the app starts. Subsequent calls are no-ops.
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Load active queue and history from Supabase
+      final activeQueue = await _queueService.fetchActiveQueue();
+      final historyItems = await _queueService.fetchHistory();
+
+      _queue.clear();
+      _history.clear();
+
+      // Separate active item from queue
+      if (activeQueue.isNotEmpty) {
+        final processingItem = activeQueue.firstWhere(
+          (item) => item.status == GenerationStatus.processing,
+          orElse: () => activeQueue.first,
+        );
+
+        if (processingItem.status == GenerationStatus.processing) {
+          _activeGeneration = processingItem;
+          _queue.addAll(activeQueue.where((item) => item.id != processingItem.id));
+        } else {
+          _queue.addAll(activeQueue);
+        }
+      }
+
+      _history.addAll(historyItems);
+
+      // Subscribe to realtime updates
+      _subscribeToRealtimeUpdates();
+
+      // Resume processing if there's an active item or queued items
+      if (_activeGeneration != null || _queue.isNotEmpty) {
+        showBottomSheet();
+        if (_activeGeneration != null) {
+          _isProcessingQueue = true;
+          _resumeProcessing(_activeGeneration!);
+        } else if (_queue.isNotEmpty) {
+          _processQueue();
+        }
+      }
+
+      _isInitialized = true;
+    } catch (e) {
+      debugPrint('GenerationQueueViewModel: initialization failed — $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Queue management
@@ -102,6 +178,8 @@ class GenerationQueueViewModel extends ChangeNotifier {
     required GenerationRequest request,
     required String modelThumbnail,
     required List<String> wardrobeThumbnails,
+    required String modelMediaId,
+    required List<String> wardrobeMediaIds,
   }) async {
     // Enforce max queue size (active + queued)
     if (totalPending >= 10) {
@@ -116,59 +194,74 @@ class GenerationQueueViewModel extends ChangeNotifier {
       return false;
     }
 
-    final item = GenerationQueueItem(
-      id: _uuid.v4(),
-      request: request,
-      status: GenerationStatus.queued,
-      timestamp: DateTime.now(),
-      modelThumbnail: modelThumbnail,
-      wardrobeThumbnails: wardrobeThumbnails,
-    );
-
-    _queue.add(item);
-    showBottomSheet();
-    
-    // Eğer queue boşsa (ilk item), hemen processing'e al
-    final shouldStartImmediately = !_isProcessingQueue && _queue.length == 1;
-    
-    notifyListeners();
-
-    // Start processing if not already running
-    if (shouldStartImmediately) {
-      // İlk item'ı hemen processing'e al (senkron)
-      _activeGeneration = _queue.removeAt(0).copyWith(
-        status: GenerationStatus.processing,
+    try {
+      // Create item in Supabase
+      final item = await _queueService.createQueueItem(
+        modelMediaId: modelMediaId,
+        modelThumbnail: modelThumbnail,
+        wardrobeMediaIds: wardrobeMediaIds,
+        wardrobeThumbnails: wardrobeThumbnails,
+        request: request,
       );
-      _isProcessingQueue = true;
+
+      _queue.add(item);
+      showBottomSheet();
+
+      // Eğer queue boşsa (ilk item), hemen processing'e al
+      final shouldStartImmediately = !_isProcessingQueue && _queue.length == 1;
+
       notifyListeners();
-      
-      // Async processing'i başlat
-      _processItem(_activeGeneration!).then((_) {
-        _isProcessingQueue = false;
-        _activeGeneration = null;
+
+      // Start processing if not already running
+      if (shouldStartImmediately) {
+        // İlk item'ı hemen processing'e al (senkron)
+        _activeGeneration = _queue.removeAt(0);
+        _isProcessingQueue = true;
+        
+        // Mark as processing in Supabase
+        await _queueService.markAsProcessing(_activeGeneration!.id);
+        _activeGeneration = _activeGeneration!.copyWith(
+          status: GenerationStatus.processing,
+        );
         notifyListeners();
-        // Sırada başka item varsa devam et
-        if (_queue.isNotEmpty) _processQueue();
-      });
-    } else if (!_isProcessingQueue) {
-      _processQueue();
+
+        // Async processing'i başlat
+        _processItem(_activeGeneration!).then((_) {
+          _isProcessingQueue = false;
+          _activeGeneration = null;
+          notifyListeners();
+          // Sırada başka item varsa devam et
+          if (_queue.isNotEmpty) _processQueue();
+        });
+      } else if (!_isProcessingQueue) {
+        _processQueue();
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('GenerationQueueViewModel: failed to add to queue — $e');
+      return false;
     }
-    
-    return true;
   }
 
   /// Cancels a queued item (only items with [GenerationStatus.queued] can be cancelled).
   ///
   /// Returns `true` if the item was found and removed, `false` otherwise.
-  bool cancelQueuedItem(String itemId) {
+  Future<bool> cancelQueuedItem(String itemId) async {
     final index = _queue.indexWhere(
       (item) => item.id == itemId && item.status == GenerationStatus.queued,
     );
     if (index == -1) return false;
 
-    _queue.removeAt(index);
-    notifyListeners();
-    return true;
+    try {
+      await _queueService.deleteQueueItem(itemId);
+      _queue.removeAt(index);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('GenerationQueueViewModel: failed to cancel item — $e');
+      return false;
+    }
   }
 
   /// Re-queues a failed item from history.
@@ -181,25 +274,40 @@ class GenerationQueueViewModel extends ChangeNotifier {
         );
     if (historyItem == null) return false;
 
+    // Extract media IDs from the request (we need to get them from somewhere)
+    // For now, we'll create a new request without media IDs
+    // This is a limitation - we should store media IDs in the request
     return addToQueue(
       request: historyItem.request,
       modelThumbnail: historyItem.modelThumbnail,
       wardrobeThumbnails: historyItem.wardrobeThumbnails,
+      modelMediaId: '', // TODO: Store media IDs in request
+      wardrobeMediaIds: [],
     );
   }
 
   /// Removes a specific item from history.
-  void removeFromHistory(String itemId) {
-    final before = _history.length;
-    _history.removeWhere((item) => item.id == itemId);
-    if (_history.length != before) notifyListeners();
+  Future<void> removeFromHistory(String itemId) async {
+    try {
+      await _queueService.deleteQueueItem(itemId);
+      final before = _history.length;
+      _history.removeWhere((item) => item.id == itemId);
+      if (_history.length != before) notifyListeners();
+    } catch (e) {
+      debugPrint('GenerationQueueViewModel: failed to remove from history — $e');
+    }
   }
 
   /// Clears all history items.
-  void clearHistory() {
+  Future<void> clearHistory() async {
     if (_history.isEmpty) return;
-    _history.clear();
-    notifyListeners();
+    try {
+      await _queueService.clearHistory();
+      _history.clear();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('GenerationQueueViewModel: failed to clear history — $e');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -264,11 +372,14 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
     while (_queue.isNotEmpty) {
       final item = _queue.removeAt(0);
+
+      // Mark as processing in Supabase
+      await _queueService.markAsProcessing(item.id);
       
       // İlk item için hemen processing durumuna geç (await öncesi)
       _activeGeneration = item.copyWith(status: GenerationStatus.processing);
       notifyListeners();
-      
+
       await _processItem(item);
     }
 
@@ -277,9 +388,20 @@ class GenerationQueueViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Resumes processing an item that was interrupted (e.g., app restart).
+  Future<void> _resumeProcessing(GenerationQueueItem item) async {
+    await _processItem(item);
+    _isProcessingQueue = false;
+    _activeGeneration = null;
+    notifyListeners();
+    
+    // Continue with queue if there are more items
+    if (_queue.isNotEmpty) _processQueue();
+  }
+
   /// Processes a single queue item: calls the n8n API and updates state.
   Future<void> _processItem(GenerationQueueItem item) async {
-    // _activeGeneration zaten _processQueue'da set edildi
+    final startTime = DateTime.now();
     
     // Auto-minimize after 4 seconds so the user can continue browsing
     Future.delayed(const Duration(seconds: 4), () {
@@ -303,6 +425,14 @@ class GenerationQueueViewModel extends ChangeNotifier {
         throw N8nException('Medya ID\'si alınamadı');
       }
 
+      // Update in Supabase
+      await _queueService.markAsCompleted(
+        itemId: item.id,
+        resultImageUrl: imageUrl,
+        resultMediaId: mediaId.toString(),
+        startedAt: startTime,
+      );
+
       final completed = _activeGeneration!.copyWith(
         status: GenerationStatus.completed,
         resultImageUrl: imageUrl,
@@ -318,6 +448,14 @@ class GenerationQueueViewModel extends ChangeNotifier {
       notifyListeners();
     } on N8nException catch (e) {
       debugPrint('GenerationQueueViewModel: generation failed — ${e.message}');
+      
+      // Update in Supabase
+      await _queueService.markAsFailed(
+        itemId: item.id,
+        errorMessage: e.message,
+        startedAt: startTime,
+      );
+
       final failed = _activeGeneration!.copyWith(
         status: GenerationStatus.failed,
         errorMessage: e.message,
@@ -329,6 +467,14 @@ class GenerationQueueViewModel extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('GenerationQueueViewModel: unexpected error — $e');
+      
+      // Update in Supabase
+      await _queueService.markAsFailed(
+        itemId: item.id,
+        errorMessage: 'Bir hata oluştu: ${e.toString()}',
+        startedAt: startTime,
+      );
+
       final failed = _activeGeneration!.copyWith(
         status: GenerationStatus.failed,
         errorMessage: 'Bir hata oluştu: ${e.toString()}',
@@ -353,6 +499,55 @@ class GenerationQueueViewModel extends ChangeNotifier {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  /// Subscribes to realtime updates from Supabase.
+  void _subscribeToRealtimeUpdates() {
+    _realtimeChannel = _queueService.subscribeToQueue(
+      onInsert: (item) {
+        // New item added (possibly from another device/session)
+        if (item.status == GenerationStatus.queued) {
+          _queue.add(item);
+          notifyListeners();
+          
+          // Start processing if not already running
+          if (!_isProcessingQueue) {
+            _processQueue();
+          }
+        }
+      },
+      onUpdate: (item) {
+        // Item status updated
+        if (item.status == GenerationStatus.completed || 
+            item.status == GenerationStatus.failed) {
+          // Move to history if not already there
+          if (!_history.any((h) => h.id == item.id)) {
+            _history.insert(0, item);
+          }
+          
+          // Remove from queue if present
+          _queue.removeWhere((q) => q.id == item.id);
+          
+          // Update active generation if it's the same item
+          if (_activeGeneration?.id == item.id) {
+            _activeGeneration = item;
+          }
+          
+          notifyListeners();
+        }
+      },
+      onDelete: (itemId) {
+        // Item deleted
+        _queue.removeWhere((item) => item.id == itemId);
+        _history.removeWhere((item) => item.id == itemId);
+        
+        if (_activeGeneration?.id == itemId) {
+          _activeGeneration = null;
+        }
+        
+        notifyListeners();
+      },
+    );
+  }
+
   /// Returns true if an identical request (same model + same garments) is
   /// already active or queued.
   bool _isDuplicateRequest(GenerationRequest request) {
@@ -376,6 +571,12 @@ class GenerationQueueViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Unsubscribe from realtime updates
+    if (_realtimeChannel != null) {
+      _queueService.unsubscribe(_realtimeChannel!);
+      _realtimeChannel = null;
+    }
+    
     // Singleton — intentionally not disposed during normal app lifecycle.
     // Called only if the singleton is explicitly reset (e.g. in tests).
     super.dispose();

@@ -16,7 +16,7 @@ import 'features/trendyol/services/trendyol_service.dart';
 import 'features/trendyol/services/saved_product_service.dart';
 import 'features/ai_look_generator/screens/selection_screen.dart';
 import 'features/ai_look_generator/viewmodels/generation_queue_view_model.dart';
-import 'features/ai_look_generator/widgets/generation_bottom_sheet.dart';
+import 'features/ai_look_generator/widgets/enhanced_generation_bottom_sheet.dart';
 import 'services/profile_service.dart';
 import 'services/media_service.dart';
 import 'services/storage_service.dart';
@@ -64,6 +64,11 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         setState(() => currentPage = value);
       }
     });
+
+    // Initialize generation queue after user is authenticated
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      GenerationQueueViewModel.instance.initialize();
+    });
   }
 
   @override
@@ -102,7 +107,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                   // ── Ana içerik ───────────────────────────────────────────
                   _buildTabBody(context, queueVm),
 
-                  // ── Queue panel (her zaman render, visibility ile kontrol) ──
+                  // ── Queue panel ──────────────────────────────────────────
                   _QueuePanel(
                     queueVm: queueVm,
                     miniPlayerHeight: _miniPlayerHeight,
@@ -293,14 +298,15 @@ class _QueuePanelState extends State<_QueuePanel> {
   void _show() {
     if (!_extentsReady || _hasBeenVisible) return;
     _hasBeenVisible = true;
-    // Direkt animate et — microtask bekleme
-    if (mounted && _sheetController.animation.value < 1) {
-      _sheetController.animateTo(
-        _miniExtent,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _sheetController.animateTo(
+          _miniExtent,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   void _hide() {
@@ -339,10 +345,14 @@ class _QueuePanelState extends State<_QueuePanel> {
     return AnimatedBuilder(
       animation: _sheetController.animation,
       builder: (context, _) {
-        // Progress hesaplama
-        final currentExtent = _sheetController.animation.value;
-        final progress = (currentExtent / _maxExtent).clamp(0.0, 1.0);
-        final isExpanded = currentExtent > _miniExtent * 1.2;
+        // SheetController.animation.value = mevcut pixel pozisyonu (0 → maxExtent)
+        final currentPixels = _sheetController.animation.value;
+
+        // Progress: backdrop ve border-radius animasyonu için (0.0 → 1.0)
+        final range = _maxExtent - _miniExtent;
+        final progress = range > 0
+            ? ((currentPixels - _miniExtent) / range).clamp(0.0, 1.0)
+            : 0.0;
 
         return Stack(
           children: [
@@ -366,10 +376,11 @@ class _QueuePanelState extends State<_QueuePanel> {
               minExtent: 0,
               maxExtent: _maxExtent,
               fit: SheetFit.expand,
+              resizable: false,
               physics: SnapSheetPhysics(
                 stops: [0, _miniExtent, _maxExtent],
                 relative: false,
-                parent: BouncingSheetPhysics(
+                parent: const BouncingSheetPhysics(
                   parent: ScrollPhysics(),
                 ),
               ),
@@ -389,10 +400,8 @@ class _QueuePanelState extends State<_QueuePanel> {
                     ),
                   ],
                 ),
-                child: GenerationCombinedPanel(
+                child: EnhancedGenerationBottomSheet(
                   queueVm: widget.queueVm,
-                  scrollController: null,
-                  isExpanded: isExpanded,
                   onMiniTap: () {
                     HapticFeedback.lightImpact();
                     _expand();

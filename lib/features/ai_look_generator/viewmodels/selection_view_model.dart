@@ -176,14 +176,18 @@ class SelectionViewModel extends ChangeNotifier {
       garments: garments,
     );
 
-    // Collect thumbnail URLs for the queue item UI
+    // Collect thumbnail URLs and media IDs for the queue item
     final modelThumbnail = modelMedia.imageUrl;
+    final modelMediaId = modelMedia.id;
     final wardrobeThumbnails = selectedItems.map((m) => m.imageUrl).toList();
+    final wardrobeMediaIds = selectedItems.map((m) => m.id).toList();
 
     await _queueViewModel.addToQueue(
       request: request,
       modelThumbnail: modelThumbnail,
       wardrobeThumbnails: wardrobeThumbnails,
+      modelMediaId: modelMediaId,
+      wardrobeMediaIds: wardrobeMediaIds,
     );
 
     // Clear selections after successful queue addition
