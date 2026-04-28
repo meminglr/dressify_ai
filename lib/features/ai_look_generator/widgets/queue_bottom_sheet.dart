@@ -13,6 +13,8 @@ import 'empty_state_widget.dart';
 
 /// Modal bottom sheet that shows the generation queue and history.
 /// Opened via the floating action button in [Home].
+/// DraggableScrollableSheet kullanır — liste scroll'u ile sheet drag'i
+/// otomatik koordine edilir, listenin en üstünde aşağı swipe sheet'i kapatır.
 class QueueBottomSheet extends StatefulWidget {
   const QueueBottomSheet({super.key});
 
@@ -38,77 +40,101 @@ class _QueueBottomSheetState extends State<QueueBottomSheet>
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    return Consumer<GenerationQueueViewModel>(
-      builder: (context, queueVm, _) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.0,
+      maxChildSize: 0.92,
+      snap: true,
+      snapSizes: const [0.92],
+      shouldCloseOnMinExtent: true,
+      builder: (context, scrollController) {
         return Container(
-          height: screenHeight * 0.92,
           decoration: const BoxDecoration(
             color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
             children: [
-              // ── Drag handle ──────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.only(top: 12, bottom: 4),
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.outlineVariant.withAlpha(120),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-
-              // ── Başlık ───────────────────────────────────────────────────
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Row(
+              // ── Drag handle + başlık — queue state'e bağımlı değil ──────
+              SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'AI Look Kuyruğu',
-                      style: GoogleFonts.manrope(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.onSurface,
-                        letterSpacing: -0.5,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12, bottom: 4),
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.outlineVariant.withAlpha(120),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(context).pop(),
-                      color: AppColors.outlineVariant,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      child: Row(
+                        children: [
+                          Text(
+                            'AI Look Kuyruğu',
+                            style: GoogleFonts.manrope(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(context).pop(),
+                            color: AppColors.outlineVariant,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              // ── Tab bar ──────────────────────────────────────────────────
-              _QueueTabBar(
-                controller: _tabController,
-                activeCount: queueVm.totalPending,
-                historyCount: queueVm.history.length,
+              // ── Tab bar — sadece sayaçlar değişince rebuild ──────────────
+              Selector<GenerationQueueViewModel,
+                  ({int activeCount, int historyCount})>(
+                selector: (_, vm) => (
+                  activeCount: vm.totalPending +
+                      vm.history
+                          .where((i) => i.status == GenerationStatus.failed)
+                          .length,
+                  historyCount: vm.history
+                      .where((i) => i.status == GenerationStatus.completed)
+                      .length,
+                ),
+                builder: (context, counts, _) => _QueueTabBar(
+                  controller: _tabController,
+                  activeCount: counts.activeCount,
+                  historyCount: counts.historyCount,
+                ),
               ),
               const Divider(height: 1, color: Color(0xFFEEEEEE)),
 
-              // ── İçerik ───────────────────────────────────────────────────
+              // ── İçerik — Consumer burada: sadece sheet içi rebuild ───────
               Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _ActiveTab(vm: queueVm),
-                    _HistoryTab(vm: queueVm),
-                  ],
+                child: Consumer<GenerationQueueViewModel>(
+                  builder: (context, queueVm, _) => TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _ActiveTab(
+                          vm: queueVm,
+                          scrollController: scrollController),
+                      _HistoryTab(
+                          vm: queueVm,
+                          scrollController: scrollController),
+                    ],
+                  ),
                 ),
               ),
-
-              SizedBox(height: bottomPadding),
             ],
           ),
         );
@@ -232,14 +258,18 @@ class _QueueTabBar extends StatelessWidget {
 
 class _ActiveTab extends StatelessWidget {
   final GenerationQueueViewModel vm;
+  final ScrollController scrollController;
 
-  const _ActiveTab({required this.vm});
+  const _ActiveTab({required this.vm, required this.scrollController});
 
   @override
   Widget build(BuildContext context) {
     final active = vm.activeGeneration;
+    final failedItems = vm.history
+        .where((i) => i.status == GenerationStatus.failed)
+        .toList();
 
-    if (active == null && vm.queue.isEmpty) {
+    if (active == null && vm.queue.isEmpty && failedItems.isEmpty) {
       return const EmptyStateWidget(
         icon: Iconsax.magic_star,
         title: 'Henüz look oluşturmadın',
@@ -248,6 +278,7 @@ class _ActiveTab extends StatelessWidget {
     }
 
     return ListView(
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
       children: [
         if (active != null) ...[
@@ -293,6 +324,47 @@ class _ActiveTab extends StatelessWidget {
               child: _QueueItemCard(item: item, vm: vm),
             ),
           ),
+          const SizedBox(height: 12),
+        ],
+        if (failedItems.isNotEmpty) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Hatalı',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withAlpha(20),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                child: Text(
+                  '${failedItems.length}',
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFEF4444),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...failedItems.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ErrorCard(item: item, vm: vm),
+            ),
+          ),
         ],
       ],
     );
@@ -305,8 +377,9 @@ class _ActiveTab extends StatelessWidget {
 
 class _HistoryTab extends StatelessWidget {
   final GenerationQueueViewModel vm;
+  final ScrollController scrollController;
 
-  const _HistoryTab({required this.vm});
+  const _HistoryTab({required this.vm, required this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -316,11 +389,15 @@ class _HistoryTab extends StatelessWidget {
       );
     }
 
-    if (vm.history.isEmpty) {
+    final completedItems = vm.history
+        .where((i) => i.status == GenerationStatus.completed)
+        .toList();
+
+    if (completedItems.isEmpty) {
       return const EmptyStateWidget(
         icon: Iconsax.clock,
         title: 'Henüz geçmiş yok',
-        description: 'Oluşturduğun looklar burada görünecek',
+        description: 'Başarıyla oluşturulan looklar burada görünecek',
       );
     }
 
@@ -332,7 +409,7 @@ class _HistoryTab extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${vm.history.length} look',
+                '${completedItems.length} look',
                 style: const TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 14,
@@ -355,10 +432,11 @@ class _HistoryTab extends StatelessWidget {
         ),
         Expanded(
           child: ListView.builder(
+            controller: scrollController,
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-            itemCount: vm.history.length,
+            itemCount: completedItems.length,
             itemBuilder: (context, index) {
-              final item = vm.history[index];
+              final item = completedItems[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _HistoryItemCard(item: item, vm: vm),
@@ -646,7 +724,7 @@ class _SuccessCard extends StatelessWidget {
 }
 
 // =============================================================================
-// Error Card
+// Error Card — kompakt satır
 // =============================================================================
 
 class _ErrorCard extends StatelessWidget {
@@ -658,70 +736,94 @@ class _ErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFEF4444).withAlpha(10),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFFEF4444).withAlpha(8),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFEF4444).withAlpha(40),
+          color: const Color(0xFFEF4444).withAlpha(30),
           width: 1,
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          const Icon(Iconsax.warning_2, size: 56, color: Color(0xFFEF4444)),
-          const SizedBox(height: 16),
-          Text(
-            item.errorMessage ?? 'Bir hata oluştu',
-            style: const TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: AppColors.onSurface,
+          // Hata ikonu
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEF4444).withAlpha(20),
+              shape: BoxShape.circle,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: () => vm.retryFailedItem(item.id),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.onPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(48),
-                ),
-                textStyle: const TextStyle(
-                  fontFamily: 'Manrope',
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              child: const Text('Tekrar Dene'),
+            child: const Icon(
+              Iconsax.warning_2,
+              size: 18,
+              color: Color(0xFFEF4444),
             ),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: OutlinedButton(
-              onPressed: () {
-                vm.removeFromHistory(item.id);
-                Navigator.of(context).pop();
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary, width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(48),
+          const SizedBox(width: 12),
+
+          // Hata mesajı
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Oluşturma başarısız',
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFEF4444),
+                  ),
                 ),
-                textStyle: const TextStyle(
-                  fontFamily: 'Manrope',
-                  fontWeight: FontWeight.w600,
-                ),
+                if (item.errorMessage != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    item.errorMessage!,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      color: AppColors.outlineVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Tekrar dene
+          TextButton(
+            onPressed: () => vm.retryFailedItem(item.id),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Tekrar Dene',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
-              child: const Text('Kapat'),
+            ),
+          ),
+
+          // Sil
+          GestureDetector(
+            onTap: () => vm.removeFromHistory(item.id),
+            child: const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(
+                Iconsax.close_circle,
+                size: 18,
+                color: AppColors.outlineVariant,
+              ),
             ),
           ),
         ],
@@ -921,9 +1023,9 @@ class _ThumbnailsRow extends StatelessWidget {
                 child: CachedNetworkImage(
                   imageUrl: url,
                   fit: BoxFit.cover,
-                  errorWidget: (context, url, error) => Container(
+                  errorWidget: (context, url, error) => const ColoredBox(
                     color: AppColors.surfaceContainerLow,
-                    child: const Icon(Iconsax.image, size: 16),
+                    child: Icon(Iconsax.image, size: 16),
                   ),
                 ),
               ),

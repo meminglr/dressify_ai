@@ -7,7 +7,6 @@ import 'core/theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'home.dart';
 import 'viewmodels/auth_viewmodel.dart';
-import 'features/ai_look_generator/viewmodels/generation_queue_view_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

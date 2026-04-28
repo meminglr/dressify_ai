@@ -171,7 +171,7 @@ class _SelectionScreenBodyState extends State<_SelectionScreenBody> {
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                   sliver: SliverGrid(
                     delegate: SliverChildBuilderDelegate(
-                      (_, __) => _ShimmerCard(),
+                      (context, index) => _ShimmerCard(),
                       childCount: 6,
                     ),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -604,7 +604,7 @@ class _WardrobeItemTile extends StatelessWidget {
                     child: Image.network(
                       item.imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorBuilder: (context, error, stackTrace) => const Icon(
                         Iconsax.image,
                         color: AppColors.outlineVariant,
                         size: 32,

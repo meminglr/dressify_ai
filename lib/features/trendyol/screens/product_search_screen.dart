@@ -155,7 +155,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
             ),
             suffixIcon: ValueListenableBuilder<TextEditingValue>(
               valueListenable: _searchController,
-              builder: (_, value, __) => value.text.isNotEmpty
+              builder: (context, value, child) => value.text.isNotEmpty
                   ? IconButton(
                       icon: Container(
                         padding: const EdgeInsets.all(6),
@@ -886,7 +886,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen>
                   ),
                   suffixIcon: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: linkController,
-                    builder: (_, val, __) => val.text.isNotEmpty
+                    builder: (context, val, child) => val.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(
                               Icons.close,

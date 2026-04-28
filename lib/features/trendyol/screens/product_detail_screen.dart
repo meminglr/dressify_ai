@@ -226,10 +226,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   // Bellek optimizasyonu için boyut sınırı
                                   memCacheWidth: 800,
                                   memCacheHeight: 1200,
-                                  placeholder: (_, __) => Container(
+                                  placeholder: (context, url) => Container(
                                     color: AppColors.surfaceContainerLow,
                                   ),
-                                  errorWidget: (_, __, ___) => Container(
+                                  errorWidget: (context, url, error) => Container(
                                     color: AppColors.surfaceContainerLow,
                                     child: const Center(
                                       child: Icon(

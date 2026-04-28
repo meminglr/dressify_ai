@@ -51,8 +51,8 @@ class ProductCard extends StatelessWidget {
                             fit: BoxFit.cover,
                             memCacheWidth: 400,
                             memCacheHeight: 600,
-                            placeholder: (_, __) => const _ImagePlaceholder(),
-                            errorWidget: (_, __, ___) => const _ImageErrorWidget(),
+                            placeholder: (context, url) => const _ImagePlaceholder(),
+                            errorWidget: (context, url, error) => const _ImageErrorWidget(),
                           )
                         : Container(
                             color: AppColors.surfaceContainerLow,

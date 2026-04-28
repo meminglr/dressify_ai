@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dressifyai/screens/home/home_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,8 @@ import 'features/trendyol/viewmodels/product_search_view_model.dart';
 import 'features/trendyol/services/trendyol_service.dart';
 import 'features/trendyol/services/saved_product_service.dart';
 import 'features/ai_look_generator/screens/selection_screen.dart';
+import 'features/ai_look_generator/models/generation_queue_item.dart';
+import 'features/ai_look_generator/models/generation_status.dart';
 import 'features/ai_look_generator/viewmodels/generation_queue_view_model.dart';
 import 'features/ai_look_generator/widgets/queue_bottom_sheet.dart';
 import 'services/profile_service.dart';
@@ -62,7 +65,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       }
     });
 
-    // Initialize generation queue after user is authenticated
     WidgetsBinding.instance.addPostFrameCallback((_) {
       GenerationQueueViewModel.instance.initialize();
     });
@@ -83,6 +85,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      enableDrag: false,
       builder: (_) => ChangeNotifierProvider.value(
         value: GenerationQueueViewModel.instance,
         child: const QueueBottomSheet(),
@@ -92,40 +95,38 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // ChangeNotifierProvider sadece alt widget'ların context üzerinden
+    // erişebilmesi için burada. Consumer KALDIRILDI — tüm Home'u rebuild
+    // ettiriyordu. FAB kendi Consumer'ını yönetiyor.
     return ChangeNotifierProvider.value(
       value: GenerationQueueViewModel.instance,
-      child: Consumer<GenerationQueueViewModel>(
-        builder: (context, queueVm, _) {
-          return PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, _) {
-              if (didPop) return;
-              if (tabController.index != 0) {
-                tabController.animateTo(0);
-              } else {
-                SystemNavigator.pop();
-              }
-            },
-            child: Material(
-              color: AppColors.background,
-              child: Stack(
-                children: [
-                  // ── Ana içerik ───────────────────────────────────────────
-                  _buildTabBody(context, queueVm),
-
-                  // ── Floating Action Button (nav bar üstünde) ─────────────
-                  _QueueFab(onTap: () => _openQueueSheet(context)),
-                ],
-              ),
-            ),
-          );
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          if (tabController.index != 0) {
+            tabController.animateTo(0);
+          } else {
+            SystemNavigator.pop();
+          }
         },
+        child: Material(
+          color: AppColors.background,
+          child: Stack(
+            children: [
+              _buildTabBody(context),
+              _QueueFab(
+                onTap: () => _openQueueSheet(context),
+                bottomBarController: _bottomBarController,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildTabBody(
-      BuildContext context, GenerationQueueViewModel queueVm) {
+  Widget _buildTabBody(BuildContext context) {
     return BottomBar(
       controller: _bottomBarController,
       fit: StackFit.expand,
@@ -188,10 +189,9 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
           dividerColor: Colors.transparent,
           indicatorPadding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
           controller: tabController,
-          indicator: UnderlineTabIndicator(
-            borderSide:
-                const BorderSide(color: AppColors.primary, width: 3),
-            insets: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          indicator: const UnderlineTabIndicator(
+            borderSide: BorderSide(color: AppColors.primary, width: 3),
+            insets: EdgeInsets.fromLTRB(16, 0, 16, 8),
           ),
           tabs: [
             _buildTab(Iconsax.home, 0),
@@ -221,82 +221,293 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 }
 
 // ---------------------------------------------------------------------------
-// _QueueFab  —  navigasyon barının hemen üstünde floating action button
+// _QueueFab
 // ---------------------------------------------------------------------------
 
-class _QueueFab extends StatelessWidget {
+class _QueueFab extends StatefulWidget {
   final VoidCallback onTap;
+  final BottomBarController bottomBarController;
 
-  const _QueueFab({required this.onTap});
+  const _QueueFab({
+    required this.onTap,
+    required this.bottomBarController,
+  });
+
+  @override
+  State<_QueueFab> createState() => _QueueFabState();
+}
+
+class _QueueFabState extends State<_QueueFab> {
+  static const _duration = Duration(milliseconds: 300);
+  static const _curve = Curves.decelerate;
+
+  bool _barVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _barVisible = widget.bottomBarController.isVisible;
+    widget.bottomBarController.addListener(_onBarVisibilityChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.bottomBarController.removeListener(_onBarVisibilityChanged);
+    super.dispose();
+  }
+
+  void _onBarVisibilityChanged() {
+    if (mounted) {
+      setState(() => _barVisible = widget.bottomBarController.isVisible);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    // Nav bar yüksekliği ~71 (55 tab + 8*2 padding) + offset(10) + bottomPadding
-    const navBarHeight = 71.0;
+
     const barOffset = 10.0;
-    const fabSize = 48.0;
-    const gap = 12.0;
+    const barHeight = 71.0;
+    const fabHeight = barHeight;
+    final fabWidth = screenWidth * 0.8;
+    const fabRadius = 50.0;
+    const gap = 10.0;
 
-    final bottomPosition = bottomPadding + barOffset + navBarHeight + gap;
+    final bottomWhenVisible = bottomPadding + barOffset + barHeight + gap;
+    final bottomWhenHidden = bottomPadding + gap;
 
-    return Consumer<GenerationQueueViewModel>(
-      builder: (context, queueVm, _) {
-        final hasActive = queueVm.isProcessing || queueVm.hasQueue;
+    // Selector: sadece displayItem değişince rebuild — queue/history/active
+    // değişimlerinin tamamı yerine sadece gösterilecek item izleniyor.
+    return Selector<GenerationQueueViewModel, GenerationQueueItem?>(
+      selector: (_, vm) =>
+          vm.activeGeneration ??
+          (vm.queue.isNotEmpty ? vm.queue.first : null) ??
+          (vm.history.isNotEmpty ? vm.history.first : null),
+      builder: (context, displayItem, _) {
+        final fabVisible = displayItem != null;
 
-        return Positioned(
-          bottom: bottomPosition,
-          right: 20,
-          child: GestureDetector(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
+        return AnimatedPositioned(
+          duration: _duration,
+          curve: _curve,
+          bottom: _barVisible ? bottomWhenVisible : bottomWhenHidden,
+          left: (screenWidth - fabWidth) / 2,
+          child: IgnorePointer(
+            ignoring: !fabVisible,
+            child: AnimatedOpacity(
+              duration: _duration,
               curve: Curves.easeOutCubic,
-              width: fabSize,
-              height: fabSize,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withAlpha(80),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Icon(
-                    Iconsax.magic_star,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                  // Aktif işlem varsa küçük badge
-                  if (hasActive)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.primary,
-                            width: 1.5,
-                          ),
-                        ),
+              opacity: fabVisible ? 1.0 : 0.0,
+              child: GestureDetector(
+                onTap: widget.onTap,
+                child: Container(
+                  width: fabWidth,
+                  height: fabHeight,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(fabRadius),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.onSurface.withAlpha(15),
+                        blurRadius: 48,
+                        offset: const Offset(0, 12),
                       ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: displayItem != null
+                              ? _FabStatusContent(item: displayItem)
+                              : const _FabIdleContent(),
+                        ),
+                        if (displayItem != null) ...[
+                          const SizedBox(width: 8),
+                          _FabThumbnail(item: displayItem),
+                        ],
+                      ],
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FAB içerik widget'ları
+// ---------------------------------------------------------------------------
+
+class _FabIdleContent extends StatelessWidget {
+  const _FabIdleContent();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'AI Look Kuyruğu',
+          style: TextStyle(
+            fontFamily: 'Manrope',
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        Text(
+          'Kuyruğu görüntüle',
+          style: TextStyle(
+            fontFamily: 'Manrope',
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AppColors.outlineVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FabStatusContent extends StatelessWidget {
+  final GenerationQueueItem item;
+
+  const _FabStatusContent({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, subtitle, color) = switch (item.status) {
+      GenerationStatus.processing => (
+          'Oluşturuluyor...',
+          '30-90 sn sürebilir',
+          AppColors.primary,
+        ),
+      GenerationStatus.completed => (
+          'Look hazır!',
+          'Görüntülemek için dokun',
+          const Color(0xFF10B981),
+        ),
+      GenerationStatus.failed => (
+          'Hata oluştu',
+          'Tekrar denemek için dokun',
+          const Color(0xFFEF4444),
+        ),
+      GenerationStatus.queued => (
+          'Sırada bekliyor',
+          'İşlem başlayacak',
+          AppColors.outlineVariant,
+        ),
+    };
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 13),
+          child: Text(
+            subtitle,
+            style: const TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: AppColors.outlineVariant,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FabThumbnail extends StatelessWidget {
+  final GenerationQueueItem item;
+
+  const _FabThumbnail({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = item.resultImageUrl ?? item.modelThumbnail;
+
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: 42,
+            height: 42,
+            child: CachedNetworkImage(
+              imageUrl: imageUrl,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => const ColoredBox(
+                color: AppColors.surfaceContainerLow,
+              ),
+              errorWidget: (context, url, error) => const ColoredBox(
+                color: AppColors.surfaceContainerLow,
+                child: Icon(
+                  Iconsax.image,
+                  size: 16,
+                  color: AppColors.outlineVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (item.status == GenerationStatus.processing)
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: ColoredBox(
+                color: Colors.black.withAlpha(60),
+                child: const Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
